@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Indian Polity - Single Page PDF Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: white;
+        }
+
+        .layout {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar for topics */
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 1.2rem;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .topic-list {
+            list-style: none;
+            padding: 1rem 0;
+        }
+
+        .topic-btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.8);
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
+            border-left: 3px solid transparent;
+        }
+
+        .topic-btn:hover,
+        .topic-btn.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-left-color: #667eea;
+        }
+
+        /* Main View Area */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .zoom-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .zoom-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.8rem;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .viewer-container {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            overflow: auto;
+            position: relative;
+        }
+
+        .page-wrapper {
+            background: white;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .page-wrapper.active {
+            display: block;
+        }
+
+        /* Spotify Section */
+        .audio-section {
+            padding: 1rem 2rem;
+            background: rgba(0, 0, 0, 0.5);
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .audio-section iframe {
+            border-radius: 12px;
+            width: 100%;
+            height: 152px;
+        }
+
+        .welcome-message {
+            text-align: center;
+            padding: 4rem;
+            opacity: 0.8;
+            font-size: 1.2rem;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="layout">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">Topics</div>
+            <ul class="topic-list" id="topicList">
+                <!-- Topics will be populated here -->
+            </ul>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="header">
+                <div class="title" id="currentTopic">Select a Topic</div>
+                <div class="controls">
+                    <button id="prevBtn" class="nav-btn" disabled>← Previous</button>
+                    <div id="pageInfo" class="page-info">-</div>
+                    <button id="nextBtn" class="nav-btn" disabled>Next →</button>
+
+                    <div class="zoom-controls">
+                        <button id="zoomOut" class="zoom-btn">−</button>
+                        <button id="zoomIn" class="zoom-btn">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="viewer-container" id="viewerContainer" oncontextmenu="return false;">
+                <div class="welcome-message" id="welcomeMessage">
+                    📚 Select a topic from the sidebar to start reading!
+                </div>
+                <div class="loading" id="loadingMessage">Loading PDF...</div>
+                <div class="page-wrapper" id="pageWrapper">
+                    <canvas id="pdfCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Spotify Embed -->
+            <div class="audio-section">
+                <iframe style="border-radius:12px"
+                    src="https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?utm_source=generator"
+                    width="100%" height="152" frameBorder="0" allowfullscreen=""
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                    loading="lazy"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Topics Data embedded
+        const topics = [{ "name": "1_Introduction", "pdf": "1_Introduction/IndianPolity-Introduction-1530282275.pdf" }, { "name": "2_Constitution-Why&How", "pdf": "2_Constitution-Why&How/IndianPolityLectures-Module1-1530533145.pdf" }, { "name": "3_The_Historical_Background-1", "pdf": "3_The_Historical_Background-1/IndianPolityLectures-Module2-1530798683.pdf" }, { "name": "4_The_Historical_Background-2", "pdf": "4_The_Historical_Background-2/IndianPolityLectures-Module3-1530798806.pdf" }, { "name": "5_Government_Of_India_Act-1958", "pdf": "5_Government_Of_India_Act-1958/IndianPolityLectures-Module4-1531225502.pdf" }, { "name": "6_Indian_Councils_Act_of_1861_and_1892", "pdf": "6_Indian_Councils_Act_of_1861_and_1892/IndianPolityLectures-Module5-1531306146.pdf" }, { "name": "7_Indian_Councils_Act_of_1909", "pdf": "7_Indian_Councils_Act_of_1909/IndianPolityLectures-Module6-1531403379.pdf" }, { "name": "8_Govenment_Of_Inda_Act_1919", "pdf": "8_Govenment_Of_Inda_Act_1919/mod7-pdf-1531912098.pdf" }, { "name": "9_Government_Of_India_Act_1935", "pdf": "9_Government_Of_India_Act_1935/IndianPolityLectures-Module8-1532004119.pdf" }, { "name": "10_Indian_Independence_Act_of_1947", "pdf": "10_Indian_Independence_Act_of_1947/IndianPolityLectures-Module9-1532610375.pdf" }, { "name": "11_Making_Of_the_Constitution", "pdf": "11_Making_Of_the_Constitution/IndianPolityLectures-Module10-1533892774.pdf" }, { "name": "12_Philosophy_Of_the_Constitution", "pdf": "12_Philosophy_Of_the_Constitution/Polity-11-1532953790.pdf" }, { "name": "13_Salient_Features_of_the_Constitution-1", "pdf": "13_Salient_Features_of_the_Constitution-1/IndianPolityLectures-Module12-1533649253.pdf" }, { "name": "14_Salient_Features_of_the_Constitution-2", "pdf": "14_Salient_Features_of_the_Constitution-2/IndianPolityLectures-Module13-1533649402.pdf" }, { "name": "15_Salient_Features_of_the_Constitution-3", "pdf": "15_Salient_Features_of_the_Constitution-3/IndianPolityLectures-Module13-1533649402.pdf" }, { "name": "16_Salient_Features_of_the_Constitution-4", "pdf": "16_Salient_Features_of_the_Constitution-4/IndianPolityLectures-Module15-1534164550.pdf" }, { "name": "17_The_preamble(Ingredients_of_Preamble_and_Direct_Democracy)", "pdf": "17_The_preamble(Ingredients_of_Preamble_and_Direct_Democracy)/IndianPolityLectures-Module16-1534427594.pdf" }, { "name": "18_The_preamble(Ingredients_of_Preamble_and_BeruBari_Union_Case)", "pdf": "18_The_preamble(Ingredients_of_Preamble_and_BeruBari_Union_Case)/IndianPolityLectures-Module17-1534766197.pdf" }, { "name": "19_Union_and_it's_Territory(Article_1_Union_of_States_and_India-federal_or_unitary)", "pdf": "19_Union_and_it's_Territory(Article_1_Union_of_States_and_India-federal_or_unitary)/IndianPolityLectures-Module18-1535458616.pdf" }, { "name": "20_Union_and_it's_Territory(Article_1_2_and_3)", "pdf": "20_Union_and_it's_Territory(Article_1_2_and_3)/IndianPolityLectures-Module19-1535459563.pdf" }, { "name": "21_Union_and_it's_Territory(Evolution_of_states_and_Union_Territories)", "pdf": "21_Union_and_it's_Territory(Evolution_of_states_and_Union_Territories)/IndianPolityLectures-Module20-1535977699.pdf" }, { "name": "22_Union_and_it's_Territory(Evolution_of_Indian_states_-_1)", "pdf": "22_Union_and_it's_Territory(Evolution_of_Indian_states_-_1)/IndianPolityLectures-Module21-1535977858.pdf" }, { "name": "23_Union_and_it's_Territory(Evolution_of_Indian_states_-_2)", "pdf": "23_Union_and_it's_Territory(Evolution_of_Indian_states_-_2)/IndianPolityLectures-Module22-1536066511.pdf" }, { "name": "24_Citizenship_(Constitutional_Provisions)", "pdf": "24_Citizenship_(Constitutional_Provisions)/IndianPolityLectures-Module23-1536323894.pdf" }, { "name": "25_Citizenship(Acquisition_of_Citizenship)", "pdf": "25_Citizenship(Acquisition_of_Citizenship)/IndianPolityLectures-Module24-1537186687.pdf" }, { "name": "26_Citizenship(Contemporary_issue-1)", "pdf": "26_Citizenship(Contemporary_issue-1)/IndianPolityLectures-Module25-1537364355.pdf" }, { "name": "27_Citizenship(Contemporary_issue-2)", "pdf": "27_Citizenship(Contemporary_issue-2)/IndianPolityLectures-Module26-1537364423.pdf" }, { "name": "28_Loss_Of_Citizenship", "pdf": "28_Loss_Of_Citizenship/IndianPolityLectures-Module27-1537789304.pdf" }, { "name": "29_Citizenship(NRI__POI__OCI)", "pdf": "29_Citizenship(NRI__POI__OCI)/IndianPolityLectures-Module28-1537881489.pdf" }, { "name": "30_Fundamental_Rights_(Features_of_FR)", "pdf": "30_Fundamental_Rights_(Features_of_FR)/IndianPolityLectures-Module29-1538575121.pdf" }, { "name": "31_Fundamental_Rights(Article_12_and_BCCI_issue)", "pdf": "31_Fundamental_Rights(Article_12_and_BCCI_issue)/IndianPolityLectures-Module30-1538709057.pdf" }, { "name": "32_Fundamental_Rights(Article_12_and_14)", "pdf": "32_Fundamental_Rights(Article_12_and_14)/IndianPolityLectures-Module31-1539005810.pdf" }, { "name": "33_Fundamental_Rights(Article_15_16_17_and_18)", "pdf": "33_Fundamental_Rights(Article_15_16_17_and_18)/IndianPolityLectures-Module32-1539171283.pdf" }, { "name": "34_Fundamental_Rights(Article_19)", "pdf": "34_Fundamental_Rights(Article_19)/IndianPolity-Module33-1540904634.pdf" }, { "name": "35_Fundamental_Rights(Article_20_and_21)", "pdf": "35_Fundamental_Rights(Article_20_and_21)/IndianPolityLectures-Module34-1541070779.pdf" }, { "name": "36_Fundamental_Rights(Article_21-contemporary_issues)", "pdf": "36_Fundamental_Rights(Article_21-contemporary_issues)/IndianPolityLectures-Module35-1541507899.pdf" }, { "name": "37_Fundamental_Rights(Article_21_A_and_22)", "pdf": "37_Fundamental_Rights(Article_21_A_and_22)/IndianPolityLectures-Module36-1541508056.pdf" }, { "name": "38_Fundamental_Rights(Article_22)", "pdf": "38_Fundamental_Rights(Article_22)/IndianPolityLectures-Module37-1541665248.pdf" }, { "name": "40_Fundamental_Rights(Article_25_Sabarimala_Issue)", "pdf": "40_Fundamental_Rights(Article_25_Sabarimala_Issue)/IndianPolityLectures-Module39-1542113144.pdf" }, { "name": "45_Coelho_case_and_Right_To_Property", "pdf": "45_Coelho_case_and_Right_To_Property/IndianPolityLectures-Module44-1542893075.pdf" }, { "name": "46_Importance_of_article_31C_and_Criticism_of_FR", "pdf": "46_Importance_of_article_31C_and_Criticism_of_FR/IndianPolityLectures-Module45-1542977090.pdf" }, { "name": "47_Directive_Principles(Features_of_DPSP_and_calssification_of_DPSP)", "pdf": "47_Directive_Principles(Features_of_DPSP_and_calssification_of_DPSP)/IndianPolityLectures-Module46-1543239026.pdf" }, { "name": "48_Directive_Principles(criticism_of_DPSP_and_Utility_of_DPSP)", "pdf": "48_Directive_Principles(criticism_of_DPSP_and_Utility_of_DPSP)/IndianPolityLectures-Module47-1543323751.pdf" }, { "name": "49_Directive_Principles_(Conflict_between_Rights_and_Directives)", "pdf": "49_Directive_Principles_(Conflict_between_Rights_and_Directives)/IndianPolityLectures-Module48-1543497719.pdf" }, { "name": "50_Fundamental_Rights_(Features_and_Criticism)", "pdf": "50_Fundamental_Rights_(Features_and_Criticism)/IndianPolityLectures-Module49-1543583175.pdf" }, { "name": "51_Amendment_of_the_constitution", "pdf": "51_Amendment_of_the_constitution/IndianPolityLectures-Module50-1543928125.pdf" }, { "name": "52_Basic_Structure_of_the_Constitution", "pdf": "52_Basic_Structure_of_the_Constitution/Presentation1-1544101814.pdf" }, { "name": "53_The_President_(Election_Process)", "pdf": "53_The_President_(Election_Process)/IndianPolity-Module52-1544620475.pdf" }, { "name": "54_The_President_(office_and_his_Impeachment)", "pdf": "54_The_President_(office_and_his_Impeachment)/IndianPolityLectures-Module53-1544706523.pdf" }, { "name": "55_The_President_(Powers_and_Functions)", "pdf": "55_The_President_(Powers_and_Functions)/IndianPolityLectures-Module54-1545139084.pdf" }, { "name": "56_The_President_(veto_power)", "pdf": "56_The_President_(veto_power)/IndianPolityLectures-Module55-1545225778.pdf" }, { "name": "57_The_President_(Pardoning_Power)", "pdf": "57_The_President_(Pardoning_Power)/IndianPolityLectures-Module56-1545651351.pdf" }, { "name": "58_Vice_President_and_Attorney_General", "pdf": "58_Vice_President_and_Attorney_General/IndianPolityLectures-Module57-1545826179.pdf" }, { "name": "59_Prime_Minister", "pdf": "59_Prime_Minister/IndianPolityLectures-Module58-1545916228.pdf" }, { "name": "60_Central_Councils_of_Ministers-1", "pdf": "60_Central_Councils_of_Ministers-1/IndianPolityLectures-Module59-1546260773.pdf" }, { "name": "61_Central_Councils_of_Ministers-2", "pdf": "61_Central_Councils_of_Ministers-2/IndianPolityLectures-Module60-1546522519.pdf" }, { "name": "62_Parliament_Composition_of_houses", "pdf": "62_Parliament_Composition_of_houses/IndianPolity-Module61-1547124730.pdf" }, { "name": "63_Parliament_Qualification_process", "pdf": "63_Parliament_Qualification_process/mod62parliamMODIFIED-pdf-1547274729.pdf" }, { "name": "64_Presiding_officers_of_lokshaba", "pdf": "64_Presiding_officers_of_lokshaba/IndianPolityLectures-Module63-1550236549.pdf" }, { "name": "65_Presiding_officers_of_Rajyasabha", "pdf": "65_Presiding_officers_of_Rajyasabha/IndianPolityLectures-Module64-1550495986.pdf" }, { "name": "66_Sessioin_of_Parliament", "pdf": "66_Sessioin_of_Parliament/IndianPolityLectures-Module65-1550754523.pdf" }, { "name": "67_Devices_Of_the_Parliamentary_Proceedings", "pdf": "67_Devices_Of_the_Parliamentary_Proceedings/IndianPolityLectures-Module66-1550841779.pdf" }, { "name": "68_Passing_of_bill_in_parliament", "pdf": "68_Passing_of_bill_in_parliament/IndianPolityLectures-Module67-1550842100.pdf" }, { "name": "69_Money_Bill_vs_Financial_Bill", "pdf": "69_Money_Bill_vs_Financial_Bill/IndianPolityLectures-Module68-1551186414.pdf" }, { "name": "70_Enactment_of_Budget", "pdf": "70_Enactment_of_Budget/IndianPolityLectures-Modules69-1551448821.pdf" }, { "name": "71_Powers_of_Parliament", "pdf": "71_Powers_of_Parliament/IndianPolityLectures-Module70-1551876000.pdf" }, { "name": "72_Position_of_Rajyasabha_Privileges", "pdf": "72_Position_of_Rajyasabha_Privileges/IndianPolityLectures-Module71-1552052509.pdf" }, { "name": "73_Parliamentary_Committees__Cabinet_Committees", "pdf": "73_Parliamentary_Committees__Cabinet_Committees/IndianPolityLectures-Module-73-1560256452.pdf" }, { "name": "74_Supreme_Court_part1", "pdf": "74_Supreme_Court_part1/IndianPolityLectures-Module-74-1560345855.pdf" }, { "name": "75_Supreme_Court_part2", "pdf": "75_Supreme_Court_part2/IndianPolityLectures-Module75-1560426082.pdf" }, { "name": "76_Judicial_Activism__Judicial_Restraint__Public_Interest_Litigation", "pdf": "76_Judicial_Activism__Judicial_Restraint__Public_Interest_Litigation/IndianPolityLectures-Module76-1560575889.pdf" }, { "name": "77_High_Courts", "pdf": "77_High_Courts/IndianPolityLectures-Module77-1560862268.pdf" }, { "name": "78_Subordinate_courts", "pdf": "78_Subordinate_courts/IndianPolityLectures-Module78-1561037020.pdf" }, { "name": "79_Alternative_Dispute_Resolution_Mechanism__Lok_Adalat", "pdf": "79_Alternative_Dispute_Resolution_Mechanism__Lok_Adalat/IndianPolityLectures-Module79-1561192393.pdf" }, { "name": "80__Governor_part-1", "pdf": "80__Governor_part-1/IndianPolityLectures-Module80-1561376724.pdf" }, { "name": "81__Governor_part-2", "pdf": "81__Governor_part-2/IndianPolityLectures-Module81-1561466659.pdf" }, { "name": "82_Chief_Minister__Council_of_Ministers", "pdf": "82_Chief_Minister__Council_of_Ministers/IndianPolityLectures-Module82-1561553397.pdf" }, { "name": "83_State_Legislature_(part-1)", "pdf": "83_State_Legislature_(part-1)/IndianPolityLectures-Module83-1561644739.pdf" }, { "name": "84_State_Legislature_(part-2)", "pdf": "84_State_Legislature_(part-2)/IndianPolityLectures-Module84-1561725407.pdf" }, { "name": "85_State_Legislature_(part-3)", "pdf": "85_State_Legislature_(part-3)/IndianPolityLectures-Module85-1561785940.pdf" }, { "name": "86_Centre-State_Relations_-_Legislative_Relations", "pdf": "86_Centre-State_Relations_-_Legislative_Relations/IndianPolityLectures-Module86-1562158923.pdf" }, { "name": "87_Centre-State_Relations_-_Administrative_and_Fiancial_Relations", "pdf": "87_Centre-State_Relations_-_Administrative_and_Fiancial_Relations/IndianPolityLectures-Module-87-1562329567.pdf" }, { "name": "88_Centre-State_Relations_-_Financial_Relations__Trends_in_Centre-State_Relations", "pdf": "88_Centre-State_Relations_-_Financial_Relations__Trends_in_Centre-State_Relations/IndianPolityLectures-Module88-1562405048.pdf" }, { "name": "89_Panchayati_Raj_-_Evolution_of_Pri_System", "pdf": "89_Panchayati_Raj_-_Evolution_of_Pri_System/IndianPolityLectures-Module89-1562850578.pdf" }, { "name": "90_Municipalities_-_Salient_features_of_74th_CAA", "pdf": "90_Municipalities_-_Salient_features_of_74th_CAA/IndianPolityLectures-Module91-1563282727.pdf" }, { "name": "91_Municipalities_-__Features_of_74th_CAA__Types_of_Urban_Goverments", "pdf": "91_Municipalities_-__Features_of_74th_CAA__Types_of_Urban_Goverments/IndianPolityLectures-Module92-1563372830.pdf" }, { "name": "92_Union_Territories__Scheduled_and_tribal_Areas", "pdf": "92_Union_Territories__Scheduled_and_tribal_Areas/IndianPolityLectures-Module93-1563607183.pdf" }, { "name": "93_Constitutional_Bodies_-_Election_Commisssion", "pdf": "93_Constitutional_Bodies_-_Election_Commisssion/IndianPolityLectures-Module94-1564056935.pdf" }, { "name": "94_Election_Comission_-_Recent_Issues_of_ECI", "pdf": "94_Election_Comission_-_Recent_Issues_of_ECI/IndianPolityLectures-Module95-1564489236.pdf" }, { "name": "95_Election_Comission_-_Simultaneous_Elections__issue_of_proxy_voting", "pdf": "95_Election_Comission_-_Simultaneous_Elections__issue_of_proxy_voting/IndianPolityLectures-Module96-1564749636.pdf" }, { "name": "96_Election_Comission_-_Changing_Nature_of_Election__Election_Laws", "pdf": "96_Election_Comission_-_Changing_Nature_of_Election__Election_Laws/IndianPolityLectures-Module97-1564754030.pdf" }, { "name": "97_Election_Comission_-_National_vs_state_parties__Model_Code_of_Conduct", "pdf": "97_Election_Comission_-_National_vs_state_parties__Model_Code_of_Conduct/IndianPolityLectures-Module98-1565266570.pdf" }, { "name": "98_Election_Comission_-_Representations_of_People's_Act__1951", "pdf": "98_Election_Comission_-_Representations_of_People's_Act__1951/IndianPolityLectures-Module99-1565789548.pdf" }, { "name": "99_Election_Comission_-_Representations_of_People's_Act__1951", "pdf": "99_Election_Comission_-_Representations_of_People's_Act__1951/IndianPolityLectures-Module100-1566027687.pdf" }, { "name": "100_NCSC__NCST_and_NSBC__Special_Officer_For_Linguistic_Minorities", "pdf": "100_NCSC__NCST_and_NSBC__Special_Officer_For_Linguistic_Minorities/IndianPolityLectures-Module101-1568450259.pdf" }, { "name": "101_Comptroller_and_Auditor_General__Advocate_General_and_Attroney_General", "pdf": "101_Comptroller_and_Auditor_General__Advocate_General_and_Attroney_General/IndianPolityLectures-Module102-1568807549.pdf" }, { "name": "102_UPSC_&_SPSC_Finance_Commision__Finance_Commission", "pdf": "102_UPSC_&_SPSC_Finance_Commision__Finance_Commission/IndianPolityLectures-Module103-1568893587.pdf" }, { "name": "103_Finance_Commission__NHRC_and_SHRC", "pdf": "103_Finance_Commission__NHRC_and_SHRC/IndianPolityLectures-Module104-1569052979.pdf" }, { "name": "104_NITI_AAYOG", "pdf": "104_NITI_AAYOG/IndianPolityLectures-Module105-1569579221.pdf" }, { "name": "105_CIC_and_SIC__CVC", "pdf": "105_CIC_and_SIC__CVC/IndianPolityLectures-Module106-1570596930.pdf" }, { "name": "106_Central_Bureau_of_Investigation", "pdf": "106_Central_Bureau_of_Investigation/IndianPolityLectures-Module107-1570798088.pdf" }, { "name": "107_Lokpal_and_Lokayuktas", "pdf": "107_Lokpal_and_Lokayuktas/IndianPolityLectures-Module108-1571746752.pdf" }, { "name": "108_Lokpal_and_Lokayuktas", "pdf": "108_Lokpal_and_Lokayuktas/IndianPolityLectures-Module109-1571747558.pdf" }, { "name": "109_Parliamentary_Privileges", "pdf": "109_Parliamentary_Privileges/IndianPolityLectures-Module-72-1552397434.pdf" }, { "name": "110_Official_Language", "pdf": "110_Official_Language/IndianPolityLectures-Module110-1571838592.pdf" }, { "name": "111_Authoritative_Text_of_the_Constitution_in_Hindi__Public_Services", "pdf": "111_Authoritative_Text_of_the_Constitution_in_Hindi__Public_Services/IndianPolityLectures-Module111-1572007019.pdf" }, { "name": "112_Tribunals__Rights_and_Liabilities_of_TheGovernment", "pdf": "112_Tribunals__Rights_and_Liabilities_of_TheGovernment/IndianPolityLectures-Module112-1572077881.pdf" }, { "name": "113_Rights_and_Liabilities_of_the_Government__Special_Provisions_Relating_to_certain_classes", "pdf": "113_Rights_and_Liabilities_of_the_Government__Special_Provisions_Relating_to_certain_classes/IndianPolityLectures-Module113-1572353480.pdf" }, { "name": "114_National_Emergency", "pdf": "114_National_Emergency/IndianPolityLectures-Module114-1572524057.pdf" }, { "name": "115_Emergency_provisions", "pdf": "115_Emergency_provisions/IndianPolityLectures-Module115-1572610271.pdf" }, { "name": "116_Pressure_Groups__Special_provisions_for_some_states", "pdf": "116_Pressure_Groups__Special_provisions_for_some_states/IndianPolityLectures-Module117-1572953514.pdf" }, { "name": "116_Inter_state_Relations", "pdf": "116_Inter_state_Relations/Indian Polity Lectures - Module 116.pdf" }, { "name": "39-Fundamental_Rights_Article_25_And_Sabarimala_Issue", "pdf": "39-Fundamental_Rights_Article_25_And_Sabarimala_Issue/India Polity Lectures - Module 39.pdf" }];
+
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.0;
+
+        const canvas = document.getElementById('pdfCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // DOM Elements
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        const topicList = document.getElementById('topicList');
+        const currentTopicLabel = document.getElementById('currentTopic');
+        const welcomeMsg = document.getElementById('welcomeMessage');
+        const loadingMsg = document.getElementById('loadingMessage');
+        const pageWrapper = document.getElementById('pageWrapper');
+
+        // Populate Sidebar
+        topics.forEach((topic, index) => {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.className = 'topic-btn';
+            btn.innerText = topic.name.replace(/_/g, ' ');
+            btn.onclick = () => loadPDF(topic.pdf, btn, topic.name);
+            li.appendChild(btn);
+            topicList.appendChild(li);
+        });
+
+        async function loadPDF(url, btnElement, topicName) {
+            // Update UI
+            document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+            currentTopicLabel.innerText = topicName.replace(/_/g, ' ');
+
+            welcomeMsg.style.display = 'none';
+            pageWrapper.classList.remove('active');
+            loadingMsg.style.display = 'block';
+
+            // Reset state
+            pdfDoc = null;
+            pageNum = 1;
+
+            try {
+                pdfDoc = await pdfjsLib.getDocument(encodeURI(url)).promise;
+                loadingMsg.style.display = 'none';
+                pageWrapper.classList.add('active');
+                renderPage(pageNum);
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                loadingMsg.innerText = 'Error loading PDF';
+            }
+        }
+
+        function renderPage(num) {
+            pageRendering = true;
+
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale: scale });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+
+                const renderTask = page.render(renderContext);
+
+                renderTask.promise.then(() => {
+                    pageRendering = false;
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+            });
+
+            // Update page counters
+            pageInfo.textContent = `Page ${num} of ${pdfDoc.numPages}`;
+
+            prevBtn.disabled = num <= 1;
+            nextBtn.disabled = num >= pdfDoc.numPages;
+        }
+
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+
+        function onPrevPage() {
+            if (pageNum <= 1) return;
+            pageNum--;
+            queueRenderPage(pageNum);
+        }
+
+        function onNextPage() {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            queueRenderPage(pageNum);
+        }
+
+        function zoomIn() {
+            scale = Math.min(scale * 1.2, 3);
+            if (pdfDoc) renderPage(pageNum);
+        }
+
+        function zoomOut() {
+            scale = Math.max(scale / 1.2, 0.5);
+            if (pdfDoc) renderPage(pageNum);
+        }
+
+        prevBtn.addEventListener('click', onPrevPage);
+        nextBtn.addEventListener('click', onNextPage);
+        document.getElementById('zoomIn').addEventListener('click', zoomIn);
+        document.getElementById('zoomOut').addEventListener('click', zoomOut);
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (!pdfDoc) return;
+            switch (e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    onPrevPage();
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    onNextPage();
+                    break;
+                case '+':
+                case '=':
+                    e.preventDefault();
+                    zoomIn();
+                    break;
+                case '-':
+                    e.preventDefault();
+                    zoomOut();
+                    break;
+            }
+        });
+    </script>
+</body>
+
+</html>
