@@ -74,6 +74,10 @@
             border-left-color: #667eea;
         }
 
+        .topic-btn.prefetched {
+            border-left-color: rgba(102, 126, 234, 0.4);
+        }
+
         /* Main View Area */
         .main-content {
             flex: 1;
@@ -512,6 +516,7 @@
             {
                 "name": "1_Introduction",
                 "pdf": "1_Introduction/IndianPolity-Introduction-1530282275.pdf",
+                "slide_share_link": "https://www.slideshare.net/slideshow/embed_code/key/wtSycmXTs7zCvH",
                 "spotify_link": "https://open.spotify.com/episode/5msgLp3KCBac92McQOC8zB?si=ilQrHTdFQD6oP6pvPN9TuA"
             },
             {
@@ -1102,12 +1107,92 @@
         let pageNumPending = null;
         let scale = 1.0;
         const LOW_RES_SCALE = 0.4;
-        const pdfCache = {};
         let currentPdfUrl = '';
         let loadGeneration = 0;
+        let currentTopicIndex = -1;
 
-        // === LRU Page Cache (max 30 entries) ===
-        const LRU_MAX = 30;
+        // === PDF Document LRU Cache (keeps N parsed documents warm) ===
+        const MAX_PDF_DOCS = 15;
+        const pdfCache = {};        // url -> pdfDoc
+        const pdfCacheOrder = [];   // LRU order, most-recently-used at the end
+        const pdfLoadPromises = {}; // url -> in-flight Promise<pdfDoc>, de-dupes concurrent loads
+
+        function pdfCacheTouch(url) {
+            const idx = pdfCacheOrder.indexOf(url);
+            if (idx !== -1) pdfCacheOrder.splice(idx, 1);
+            pdfCacheOrder.push(url);
+        }
+
+        function pdfCacheSet(url, doc) {
+            pdfCache[url] = doc;
+            pdfCacheTouch(url);
+            // NOTE: we deliberately do NOT call doc.destroy() on eviction here.
+            // Prefetches (hover, neighbor-warming) can still have an in-flight
+            // getPage()/render() against an "evicted" document; destroying it
+            // mid-operation kills the PDF.js worker for that doc and surfaces
+            // as an unhandled rejection ("Script error." / broken next load).
+            // Just drop our reference and let it be garbage-collected once
+            // nothing else is using it — simpler and race-free.
+            let guard = 0;
+            while (pdfCacheOrder.length > MAX_PDF_DOCS && guard < pdfCacheOrder.length) {
+                const oldUrl = pdfCacheOrder[0];
+                // Never evict the document currently on screen
+                if (oldUrl === currentPdfUrl) {
+                    pdfCacheOrder.shift();
+                    pdfCacheOrder.push(oldUrl);
+                    guard++;
+                    continue;
+                }
+                pdfCacheOrder.shift();
+                delete pdfCache[oldUrl];
+            }
+        }
+
+        function pdfCacheGet(url) {
+            const doc = pdfCache[url];
+            if (doc) pdfCacheTouch(url);
+            return doc || null;
+        }
+
+        // Loads (or returns an already-loading / already-loaded) PDF document.
+        // Shared by both the "user clicked a topic" path and the background prefetch path.
+        function getOrLoadDocument(url, onProgress) {
+            if (!url || typeof url !== 'string') {
+                return Promise.reject(new Error('getOrLoadDocument called with invalid url: ' + url));
+            }
+
+            const cached = pdfCacheGet(url);
+            if (cached) return Promise.resolve(cached);
+
+            if (pdfLoadPromises[url]) return pdfLoadPromises[url];
+
+            const loadingTask = pdfjsLib.getDocument({
+                url,
+                disableRange: false,
+                disableStream: false,
+                rangeChunkSize: 65536,
+                disableFontFace: true,
+                cMapPacked: true,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
+            });
+            if (onProgress) loadingTask.onProgress = onProgress;
+
+            const promise = loadingTask.promise.then(doc => {
+                pdfCacheSet(url, doc);
+                delete pdfLoadPromises[url];
+                return doc;
+            }).catch(err => {
+                delete pdfLoadPromises[url];
+                throw err;
+            });
+
+            pdfLoadPromises[url] = promise;
+            return promise;
+        }
+
+        // === LRU Page Cache (max 40 entries) ===
+        const LRU_MAX = 40;
         const lruKeys = [];
         const renderedPageCache = {};
         function lruSet(key, value) {
@@ -1127,6 +1212,9 @@
             lruKeys.push(key);
             return renderedPageCache[key];
         }
+        function lruHas(key) {
+            return Object.prototype.hasOwnProperty.call(renderedPageCache, key);
+        }
 
         // === Canvas Pool (reuse offscreen canvases) ===
         const canvasPool = [];
@@ -1134,7 +1222,7 @@
             return canvasPool.pop() || document.createElement('canvas');
         }
         function returnCanvas(c) {
-            if (canvasPool.length < 5) canvasPool.push(c);
+            if (canvasPool.length < 8) canvasPool.push(c);
         }
 
         const canvas = document.getElementById('pdfCanvas');
@@ -1178,39 +1266,92 @@
         hamburgerBtn.addEventListener('click', toggleSidebar);
         sidebarBackdrop.addEventListener('click', closeSidebar);
 
+        // === Hover-to-prefetch: start warming a PDF as soon as the pointer
+        // rests on its sidebar entry, so a click lands on an already-loaded doc ===
+        const HOVER_PREFETCH_DELAY = 130; // ms
+        const hoverTimers = new WeakMap();
+
+        function markPrefetched(btn) {
+            if (btn) btn.classList.add('prefetched');
+        }
+
+        function prefetchTopicDocument(topic, btn) {
+            const url = encodeURI(topic.pdf);
+            if (pdfCacheGet(url)) { markPrefetched(btn); return Promise.resolve(); }
+            return getOrLoadDocument(url).then(doc => {
+                markPrefetched(btn);
+                // Warm the first page too (low-res is enough to feel instant on open,
+                // full-res keeps building in the background via renderPage's own logic).
+                return prefetchFirstPage(doc, url);
+            }).catch(() => { });
+        }
+
+        async function prefetchFirstPage(doc, url) {
+            try {
+                const page = await doc.getPage(1);
+                const predictedScale = getAutoScale(page) || scale;
+                const key = pageCacheKey(url, 1, predictedScale);
+                if (lruHas(key)) return;
+                const result = await renderToCanvas(doc, 1, predictedScale);
+                lruSet(key, result);
+            } catch (e) { /* best-effort */ }
+        }
+
+        // Warm the topics immediately before/after the one just opened —
+        // mirrors how SlideShare quietly loads the next slide while you read the current one.
+        function prefetchNeighbors(index) {
+            const scheduleIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 60));
+            [index + 1, index - 1, index + 2].forEach(i => {
+                if (i < 0 || i >= topics.length) return;
+                scheduleIdle(() => {
+                    const topic = topics[i];
+                    const btn = topicButtons[i];
+                    prefetchTopicDocument(topic, btn);
+                });
+            });
+        }
+
         // Populate Sidebar
-        topics.forEach((topic) => {
+        const topicButtons = [];
+        topics.forEach((topic, index) => {
             const li = document.createElement('li');
             const btn = document.createElement('button');
             btn.className = 'topic-btn';
             btn.innerText = topic.name.replace(/_/g, ' ');
             btn.onclick = () => {
-                loadPDF(topic.pdf, btn, topic.name, topic.spotify_link);
+                loadPDF(topic.pdf, btn, topic.name, topic.spotify_link, index);
                 closeSidebar();
             };
+            btn.addEventListener('mouseenter', () => {
+                const timer = setTimeout(() => prefetchTopicDocument(topic, btn), HOVER_PREFETCH_DELAY);
+                hoverTimers.set(btn, timer);
+            });
+            btn.addEventListener('mouseleave', () => {
+                const timer = hoverTimers.get(btn);
+                if (timer) clearTimeout(timer);
+            });
             li.appendChild(btn);
             topicList.appendChild(li);
+            topicButtons.push(btn);
         });
 
         function pageCacheKey(url, num, s) {
             return `${url}:${num}:${s.toFixed(2)}`;
         }
 
-        async function loadPDF(url, btnElement, topicName, spotifyLink) {
+        async function loadPDF(url, btnElement, topicName, spotifyLink, topicIndex) {
             const myGeneration = ++loadGeneration;
 
             document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
             if (btnElement) btnElement.classList.add('active');
             currentTopicLabel.innerText = topicName.replace(/_/g, ' ');
+            currentTopicIndex = typeof topicIndex === 'number' ? topicIndex : topics.findIndex(t => t.pdf === url);
 
             welcomeMsg.style.display = 'none';
-            pageWrapper.classList.remove('active');
-            skeleton.classList.remove('active');
 
             const progressBar = document.getElementById('progressBar');
             const loadingText = document.getElementById('loadingText');
 
-            pdfDoc = null;
             pageNum = 1;
             pageRendering = false;
             pageNumPending = null;
@@ -1227,44 +1368,40 @@
             const encodedUrl = encodeURI(url);
             currentPdfUrl = encodedUrl;
 
-            // Cached PDF — instant
-            if (pdfCache[encodedUrl]) {
-                pdfDoc = pdfCache[encodedUrl];
+            // Already warm (hover-prefetched or previously viewed) — practically instant
+            const cachedDoc = pdfCacheGet(encodedUrl);
+            if (cachedDoc) {
+                pdfDoc = cachedDoc;
+                loadingMsg.style.display = 'none';
+                pageWrapper.classList.remove('active');
+                skeleton.classList.remove('active');
                 pageWrapper.classList.add('active');
                 renderPage(pageNum);
+                prefetchNeighbors(currentTopicIndex);
                 return;
             }
 
+            pageWrapper.classList.remove('active');
+            skeleton.classList.remove('active');
             loadingMsg.style.display = 'block';
             loadingText.textContent = 'Loading...';
             progressBar.style.width = '0%';
 
             try {
-                const loadingTask = pdfjsLib.getDocument({
-                    url: encodedUrl,
-                    disableRange: false,
-                    disableStream: false,
-                    rangeChunkSize: 65536,
-                    disableFontFace: true,
-                    cMapPacked: true,
-                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-                    standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
-                });
-                loadingTask.onProgress = (progress) => {
+                const doc = await getOrLoadDocument(encodedUrl, (progress) => {
                     if (myGeneration !== loadGeneration) return;
                     if (progress.total > 0) {
                         const pct = Math.round((progress.loaded / progress.total) * 100);
                         progressBar.style.width = pct + '%';
                     }
-                };
-                const doc = await loadingTask.promise;
+                });
                 if (myGeneration !== loadGeneration) return;
 
                 pdfDoc = doc;
-                pdfCache[encodedUrl] = doc;
                 loadingMsg.style.display = 'none';
                 pageWrapper.classList.add('active');
                 renderPage(pageNum);
+                prefetchNeighbors(currentTopicIndex);
             } catch (error) {
                 if (myGeneration !== loadGeneration) return;
                 console.error('Error loading PDF:', error);
@@ -1336,7 +1473,7 @@
             prevBtn.disabled = num <= 1;
             nextBtn.disabled = num >= myDoc.numPages;
 
-            // CASE 1: Cached — instant display
+            // CASE 1: Cached — instant display, no skeleton flash at all
             const cached = lruGet(fullKey);
             if (cached) {
                 skeleton.classList.remove('active');
@@ -1449,6 +1586,17 @@
 
         document.addEventListener('dragstart', (e) => e.preventDefault());
         document.addEventListener('drop', (e) => e.preventDefault());
+
+        // === Idle-time warm-up: quietly parse the first couple of topics
+        // shortly after page load, so the very first click is fast too ===
+        (function warmStart() {
+            const scheduleIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 300));
+            scheduleIdle(() => {
+                [0, 1].forEach(i => {
+                    if (topics[i]) prefetchTopicDocument(topics[i], topicButtons[i]);
+                });
+            });
+        })();
     </script>
 </body>
 
