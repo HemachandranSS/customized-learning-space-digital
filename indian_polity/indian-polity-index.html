@@ -936,12 +936,15 @@
         let pageRendering = false;
         let pageNumPending = null;
         let scale = 1.0;
-        const pdfCache = {};           // PDF document cache (by URL)
-        const renderedPageCache = {};  // Rendered page image cache (by "url:page:scale")
-        let currentPdfUrl = '';        // Track current PDF for cache keys
+        const LOW_RES_SCALE = 0.4;
+        const pdfCache = {};
+        const renderedPageCache = {};
+        let currentPdfUrl = '';
+        let loadGeneration = 0;        // Prevents race conditions between topic switches
 
         const canvas = document.getElementById('pdfCanvas');
         const ctx = canvas.getContext('2d');
+        canvas.style.imageRendering = 'auto';
 
         // DOM Elements
         const prevBtn = document.getElementById('prevBtn');
@@ -964,13 +967,14 @@
             topicList.appendChild(li);
         });
 
-        // Generate cache key for a rendered page
         function pageCacheKey(url, num, s) {
             return `${url}:${num}:${s.toFixed(2)}`;
         }
 
         async function loadPDF(url, btnElement, topicName, spotifyLink) {
-            // Update UI
+            // Increment generation — any in-flight renders from previous load are now stale
+            const myGeneration = ++loadGeneration;
+
             document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
             if (btnElement) btnElement.classList.add('active');
             currentTopicLabel.innerText = topicName.replace(/_/g, ' ');
@@ -981,11 +985,12 @@
             const progressBar = document.getElementById('progressBar');
             const loadingText = document.getElementById('loadingText');
 
-            // Reset state
             pdfDoc = null;
             pageNum = 1;
+            pageRendering = false;
+            pageNumPending = null;
 
-            // Update Spotify player
+            // Update Spotify
             const spotifyPlayer = document.getElementById('spotifyPlayer');
             if (spotifyLink) {
                 const embedUrl = spotifyLink.replace('open.spotify.com/', 'open.spotify.com/embed/').split('?')[0] + '?utm_source=generator';
@@ -997,7 +1002,7 @@
             const encodedUrl = encodeURI(url);
             currentPdfUrl = encodedUrl;
 
-            // Check cache first
+            // Cached PDF — instant
             if (pdfCache[encodedUrl]) {
                 pdfDoc = pdfCache[encodedUrl];
                 pageWrapper.classList.add('active');
@@ -1005,124 +1010,146 @@
                 return;
             }
 
-            // Show loading
             loadingMsg.style.display = 'block';
             loadingText.textContent = 'Loading...';
-            progressBar.style.width = '50%';
+            progressBar.style.width = '0%';
 
             try {
-                // Lazy + fast loading config
                 const loadingTask = pdfjsLib.getDocument({
                     url: encodedUrl,
-                    disableAutoFetch: true,
-                    disableStream: true,
-                    disableFontFace: true,     // Skip web font loading = faster
-                    rangeChunkSize: 32768      // 32KB chunks for faster first fetch
+                    disableFontFace: true,
+                    cMapPacked: true
                 });
-                pdfDoc = await loadingTask.promise;
-                pdfCache[encodedUrl] = pdfDoc;
-                progressBar.style.width = '100%';
+                loadingTask.onProgress = (progress) => {
+                    if (myGeneration !== loadGeneration) return; // Stale
+                    if (progress.total > 0) {
+                        const pct = Math.round((progress.loaded / progress.total) * 100);
+                        progressBar.style.width = pct + '%';
+                    }
+                };
+                const doc = await loadingTask.promise;
+
+                // Check if user switched to another topic while we were loading
+                if (myGeneration !== loadGeneration) return;
+
+                pdfDoc = doc;
+                pdfCache[encodedUrl] = doc;
                 loadingMsg.style.display = 'none';
                 pageWrapper.classList.add('active');
                 renderPage(pageNum);
             } catch (error) {
+                if (myGeneration !== loadGeneration) return;
                 console.error('Error loading PDF:', error);
                 loadingText.textContent = 'Error loading PDF';
                 progressBar.style.width = '0%';
             }
         }
 
-        // Render a page to an offscreen canvas and return as ImageBitmap
-        async function renderPageToCache(num) {
-            const key = pageCacheKey(currentPdfUrl, num, scale);
-            if (renderedPageCache[key]) return renderedPageCache[key];
-
-            const page = await pdfDoc.getPage(num);
-            const viewport = page.getViewport({ scale: scale });
+        // Render a page to an offscreen canvas using an explicit doc reference
+        async function renderToCanvas(doc, num, renderScale) {
+            const page = await doc.getPage(num);
+            const viewport = page.getViewport({ scale: renderScale });
             const offscreen = document.createElement('canvas');
             offscreen.width = viewport.width;
             offscreen.height = viewport.height;
             const offCtx = offscreen.getContext('2d');
-
-            await page.render({ canvasContext: offCtx, viewport: viewport }).promise;
-
-            // Cache the rendered result
-            renderedPageCache[key] = {
-                width: viewport.width,
-                height: viewport.height,
-                canvas: offscreen
-            };
-            return renderedPageCache[key];
+            await page.render({ canvasContext: offCtx, viewport }).promise;
+            return { canvas: offscreen, width: viewport.width, height: viewport.height };
         }
 
-        // Prefetch adjacent pages in the background
-        function prefetchAdjacentPages(num) {
-            const pagesToPrefetch = [];
-            if (num + 1 <= pdfDoc.numPages) pagesToPrefetch.push(num + 1);
-            if (num - 1 >= 1) pagesToPrefetch.push(num - 1);
-            if (num + 2 <= pdfDoc.numPages) pagesToPrefetch.push(num + 2);
+        function displayOnCanvas(result, displayWidth, displayHeight) {
+            canvas.width = displayWidth;
+            canvas.height = displayHeight;
+            ctx.drawImage(result.canvas, 0, 0, displayWidth, displayHeight);
+        }
 
-            pagesToPrefetch.forEach(p => {
-                const key = pageCacheKey(currentPdfUrl, p, scale);
+        // Prefetch adjacent pages — with generation check
+        function prefetchPages(num, doc, url, gen) {
+            const pages = [];
+            if (num + 1 <= doc.numPages) pages.push(num + 1);
+            if (num - 1 >= 1) pages.push(num - 1);
+            if (num + 2 <= doc.numPages) pages.push(num + 2);
+
+            pages.forEach(p => {
+                const key = pageCacheKey(url, p, scale);
                 if (!renderedPageCache[key]) {
-                    // Low priority background render
                     setTimeout(() => {
-                        if (pdfDoc && currentPdfUrl) {
-                            renderPageToCache(p).catch(() => { }); // Silent fail
+                        if (gen !== loadGeneration) return; // Stale — user switched topic
+                        if (!renderedPageCache[key]) {
+                            renderToCanvas(doc, p, scale).then(result => {
+                                if (gen === loadGeneration) {
+                                    renderedPageCache[key] = result;
+                                }
+                            }).catch(() => { });
                         }
-                    }, 100);
+                    }, 150);
                 }
             });
         }
 
         async function renderPage(num) {
             pageRendering = true;
+            const myGeneration = loadGeneration;
+            const myDoc = pdfDoc;
+            const myUrl = currentPdfUrl;
+            const fullKey = pageCacheKey(myUrl, num, scale);
 
-            const key = pageCacheKey(currentPdfUrl, num, scale);
+            // Update UI immediately
+            pageInfo.textContent = `Page ${num} of ${myDoc.numPages}`;
+            prevBtn.disabled = num <= 1;
+            nextBtn.disabled = num >= myDoc.numPages;
 
-            // Check if this page is already cached (instant display!)
-            if (renderedPageCache[key]) {
-                const cached = renderedPageCache[key];
-                canvas.width = cached.width;
-                canvas.height = cached.height;
-                ctx.drawImage(cached.canvas, 0, 0);
+            // === CASE 1: Full-res cached — INSTANT ===
+            if (renderedPageCache[fullKey]) {
+                const cached = renderedPageCache[fullKey];
+                displayOnCanvas(cached, cached.width, cached.height);
                 canvas.style.opacity = '1';
                 pageRendering = false;
-
                 if (pageNumPending !== null) {
-                    const pending = pageNumPending;
-                    pageNumPending = null;
-                    renderPage(pending);
+                    const p = pageNumPending; pageNumPending = null;
+                    renderPage(p);
                 }
-            } else {
-                // First time rendering this page - show brief loading
-                canvas.style.opacity = '0.5';
-                try {
-                    const cached = await renderPageToCache(num);
-                    canvas.width = cached.width;
-                    canvas.height = cached.height;
-                    ctx.drawImage(cached.canvas, 0, 0);
-                    canvas.style.opacity = '1';
-                    pageRendering = false;
-
-                    if (pageNumPending !== null) {
-                        const pending = pageNumPending;
-                        pageNumPending = null;
-                        renderPage(pending);
-                    }
-                } catch (err) {
-                    console.error('Error rendering page:', err);
-                    pageRendering = false;
-                }
+                prefetchPages(num, myDoc, myUrl, myGeneration);
+                return;
             }
 
-            // Update page counters
-            pageInfo.textContent = `Page ${num} of ${pdfDoc.numPages}`;
-            prevBtn.disabled = num <= 1;
-            nextBtn.disabled = num >= pdfDoc.numPages;
+            // === CASE 2: Progressive — low-res first, then full quality ===
+            try {
+                // Get full viewport dimensions
+                const page = await myDoc.getPage(num);
+                if (myGeneration !== loadGeneration) { pageRendering = false; return; }
 
-            // Prefetch adjacent pages in background
-            prefetchAdjacentPages(num);
+                const fullViewport = page.getViewport({ scale: scale });
+                const displayW = fullViewport.width;
+                const displayH = fullViewport.height;
+
+                // Step 1: Low-res preview (fast)
+                const lowRes = await renderToCanvas(myDoc, num, LOW_RES_SCALE);
+                if (myGeneration !== loadGeneration) { pageRendering = false; return; }
+                displayOnCanvas(lowRes, displayW, displayH);
+                canvas.style.opacity = '1';
+
+                // Step 2: Full quality render and swap
+                const fullRes = await renderToCanvas(myDoc, num, scale);
+                if (myGeneration !== loadGeneration) { pageRendering = false; return; }
+                renderedPageCache[fullKey] = fullRes;
+                displayOnCanvas(fullRes, fullRes.width, fullRes.height);
+
+                pageRendering = false;
+                if (pageNumPending !== null) {
+                    const p = pageNumPending; pageNumPending = null;
+                    renderPage(p);
+                }
+            } catch (err) {
+                if (myGeneration === loadGeneration) {
+                    console.error('Error rendering page:', err);
+                }
+                pageRendering = false;
+            }
+
+            if (myGeneration === loadGeneration) {
+                prefetchPages(num, myDoc, myUrl, myGeneration);
+            }
         }
 
         function queueRenderPage(num) {
@@ -1140,7 +1167,7 @@
         }
 
         function onNextPage() {
-            if (pageNum >= pdfDoc.numPages) return;
+            if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
             pageNum++;
             queueRenderPage(pageNum);
         }
