@@ -936,7 +936,9 @@
         let pageRendering = false;
         let pageNumPending = null;
         let scale = 1.0;
-        const pdfCache = {};
+        const pdfCache = {};           // PDF document cache (by URL)
+        const renderedPageCache = {};  // Rendered page image cache (by "url:page:scale")
+        let currentPdfUrl = '';        // Track current PDF for cache keys
 
         const canvas = document.getElementById('pdfCanvas');
         const ctx = canvas.getContext('2d');
@@ -961,6 +963,11 @@
             li.appendChild(btn);
             topicList.appendChild(li);
         });
+
+        // Generate cache key for a rendered page
+        function pageCacheKey(url, num, s) {
+            return `${url}:${num}:${s.toFixed(2)}`;
+        }
 
         async function loadPDF(url, btnElement, topicName, spotifyLink) {
             // Update UI
@@ -988,6 +995,7 @@
             }
 
             const encodedUrl = encodeURI(url);
+            currentPdfUrl = encodedUrl;
 
             // Check cache first
             if (pdfCache[encodedUrl]) {
@@ -999,19 +1007,20 @@
 
             // Show loading
             loadingMsg.style.display = 'block';
-            loadingText.textContent = 'Loading first page...';
-            progressBar.style.width = '30%';
+            loadingText.textContent = 'Loading...';
+            progressBar.style.width = '50%';
 
             try {
-                // Lazy loading: only fetch data needed for the current page
+                // Lazy + fast loading config
                 const loadingTask = pdfjsLib.getDocument({
                     url: encodedUrl,
-                    disableAutoFetch: true,   // Don't prefetch entire PDF
-                    disableStream: true,       // Don't stream entire PDF
-                    rangeChunkSize: 65536      // Fetch 64KB chunks on demand
+                    disableAutoFetch: true,
+                    disableStream: true,
+                    disableFontFace: true,     // Skip web font loading = faster
+                    rangeChunkSize: 32768      // 32KB chunks for faster first fetch
                 });
                 pdfDoc = await loadingTask.promise;
-                pdfCache[encodedUrl] = pdfDoc; // Cache the document reference
+                pdfCache[encodedUrl] = pdfDoc;
                 progressBar.style.width = '100%';
                 loadingMsg.style.display = 'none';
                 pageWrapper.classList.add('active');
@@ -1023,37 +1032,97 @@
             }
         }
 
-        function renderPage(num) {
-            pageRendering = true;
-            canvas.style.opacity = '0.5'; // Brief loading feedback
+        // Render a page to an offscreen canvas and return as ImageBitmap
+        async function renderPageToCache(num) {
+            const key = pageCacheKey(currentPdfUrl, num, scale);
+            if (renderedPageCache[key]) return renderedPageCache[key];
 
-            pdfDoc.getPage(num).then(page => {
-                const viewport = page.getViewport({ scale: scale });
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
+            const page = await pdfDoc.getPage(num);
+            const viewport = page.getViewport({ scale: scale });
+            const offscreen = document.createElement('canvas');
+            offscreen.width = viewport.width;
+            offscreen.height = viewport.height;
+            const offCtx = offscreen.getContext('2d');
 
-                const renderContext = {
-                    canvasContext: ctx,
-                    viewport: viewport
-                };
+            await page.render({ canvasContext: offCtx, viewport: viewport }).promise;
 
-                const renderTask = page.render(renderContext);
+            // Cache the rendered result
+            renderedPageCache[key] = {
+                width: viewport.width,
+                height: viewport.height,
+                canvas: offscreen
+            };
+            return renderedPageCache[key];
+        }
 
-                renderTask.promise.then(() => {
-                    canvas.style.opacity = '1'; // Page loaded
-                    pageRendering = false;
-                    if (pageNumPending !== null) {
-                        renderPage(pageNumPending);
-                        pageNumPending = null;
-                    }
-                });
+        // Prefetch adjacent pages in the background
+        function prefetchAdjacentPages(num) {
+            const pagesToPrefetch = [];
+            if (num + 1 <= pdfDoc.numPages) pagesToPrefetch.push(num + 1);
+            if (num - 1 >= 1) pagesToPrefetch.push(num - 1);
+            if (num + 2 <= pdfDoc.numPages) pagesToPrefetch.push(num + 2);
+
+            pagesToPrefetch.forEach(p => {
+                const key = pageCacheKey(currentPdfUrl, p, scale);
+                if (!renderedPageCache[key]) {
+                    // Low priority background render
+                    setTimeout(() => {
+                        if (pdfDoc && currentPdfUrl) {
+                            renderPageToCache(p).catch(() => { }); // Silent fail
+                        }
+                    }, 100);
+                }
             });
+        }
+
+        async function renderPage(num) {
+            pageRendering = true;
+
+            const key = pageCacheKey(currentPdfUrl, num, scale);
+
+            // Check if this page is already cached (instant display!)
+            if (renderedPageCache[key]) {
+                const cached = renderedPageCache[key];
+                canvas.width = cached.width;
+                canvas.height = cached.height;
+                ctx.drawImage(cached.canvas, 0, 0);
+                canvas.style.opacity = '1';
+                pageRendering = false;
+
+                if (pageNumPending !== null) {
+                    const pending = pageNumPending;
+                    pageNumPending = null;
+                    renderPage(pending);
+                }
+            } else {
+                // First time rendering this page - show brief loading
+                canvas.style.opacity = '0.5';
+                try {
+                    const cached = await renderPageToCache(num);
+                    canvas.width = cached.width;
+                    canvas.height = cached.height;
+                    ctx.drawImage(cached.canvas, 0, 0);
+                    canvas.style.opacity = '1';
+                    pageRendering = false;
+
+                    if (pageNumPending !== null) {
+                        const pending = pageNumPending;
+                        pageNumPending = null;
+                        renderPage(pending);
+                    }
+                } catch (err) {
+                    console.error('Error rendering page:', err);
+                    pageRendering = false;
+                }
+            }
 
             // Update page counters
             pageInfo.textContent = `Page ${num} of ${pdfDoc.numPages}`;
-
             prevBtn.disabled = num <= 1;
             nextBtn.disabled = num >= pdfDoc.numPages;
+
+            // Prefetch adjacent pages in background
+            prefetchAdjacentPages(num);
         }
 
         function queueRenderPage(num) {
