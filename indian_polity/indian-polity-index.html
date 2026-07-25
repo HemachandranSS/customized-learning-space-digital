@@ -275,10 +275,172 @@
             }
         }
 
+        /* Skeleton shimmer */
+        .skeleton-shimmer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s ease-in-out infinite;
+            z-index: 5;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .skeleton-shimmer.active {
+            display: block;
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        /* Hamburger Button */
+        .hamburger-btn {
+            display: none;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            padding: 0.4rem 0.7rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+
+        .hamburger-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Sidebar backdrop */
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 99;
+        }
+
+        .sidebar-backdrop.active {
+            display: block;
+        }
+
         /* Block printing */
         @media print {
             body {
                 display: none !important;
+            }
+        }
+
+        /* ===== RESPONSIVE: Tablet (≤768px) ===== */
+        @media (max-width: 768px) {
+            .hamburger-btn {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -300px;
+                height: 100vh;
+                z-index: 100;
+                transition: left 0.3s ease;
+                width: 280px;
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            .header {
+                padding: 0.6rem 1rem;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            .title {
+                font-size: 1rem;
+                flex: 1;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .controls {
+                gap: 0.5rem;
+                flex-wrap: wrap;
+            }
+
+            .nav-btn {
+                padding: 0.4rem 0.7rem;
+                font-size: 0.8rem;
+            }
+
+            .page-info {
+                font-size: 0.8rem;
+                padding: 0.3rem 0.7rem;
+            }
+
+            .viewer-container {
+                padding: 1rem;
+            }
+
+            .audio-section {
+                padding: 0.5rem 1rem;
+            }
+
+            .audio-section iframe {
+                height: 80px;
+            }
+        }
+
+        /* ===== RESPONSIVE: Phone (≤480px) ===== */
+        @media (max-width: 480px) {
+            .header {
+                padding: 0.5rem 0.6rem;
+            }
+
+            .title {
+                font-size: 0.85rem;
+            }
+
+            .controls {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .nav-btn {
+                padding: 0.3rem 0.6rem;
+                font-size: 0.75rem;
+                border-radius: 14px;
+            }
+
+            .zoom-btn {
+                padding: 0.3rem 0.6rem;
+                font-size: 0.85rem;
+            }
+
+            .viewer-container {
+                padding: 0.5rem;
+            }
+
+            .welcome-message {
+                padding: 2rem 1rem;
+                font-size: 1rem;
             }
         }
     </style>
@@ -286,10 +448,11 @@
 
 <body>
 
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
     <div class="layout">
         <!-- Sidebar -->
-        <div class="sidebar">
-            <div class="sidebar-header">Topics</div>
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">📚 Topics</div>
             <ul class="topic-list" id="topicList">
                 <!-- Topics will be populated here -->
             </ul>
@@ -298,6 +461,7 @@
         <!-- Main Content -->
         <div class="main-content">
             <div class="header">
+                <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle sidebar">☰</button>
                 <div class="title" id="currentTopic">Select a Topic</div>
                 <div class="controls">
                     <button id="prevBtn" class="nav-btn" disabled>← Previous</button>
@@ -323,6 +487,7 @@
                     </div>
                 </div>
                 <div class="page-wrapper" id="pageWrapper">
+                    <div class="skeleton-shimmer" id="skeletonShimmer"></div>
                     <canvas id="pdfCanvas"></canvas>
                 </div>
             </div>
@@ -938,9 +1103,39 @@
         let scale = 1.0;
         const LOW_RES_SCALE = 0.4;
         const pdfCache = {};
-        const renderedPageCache = {};
         let currentPdfUrl = '';
-        let loadGeneration = 0;        // Prevents race conditions between topic switches
+        let loadGeneration = 0;
+
+        // === LRU Page Cache (max 30 entries) ===
+        const LRU_MAX = 30;
+        const lruKeys = [];
+        const renderedPageCache = {};
+        function lruSet(key, value) {
+            const idx = lruKeys.indexOf(key);
+            if (idx !== -1) lruKeys.splice(idx, 1);
+            lruKeys.push(key);
+            renderedPageCache[key] = value;
+            while (lruKeys.length > LRU_MAX) {
+                const old = lruKeys.shift();
+                delete renderedPageCache[old];
+            }
+        }
+        function lruGet(key) {
+            const idx = lruKeys.indexOf(key);
+            if (idx === -1) return null;
+            lruKeys.splice(idx, 1);
+            lruKeys.push(key);
+            return renderedPageCache[key];
+        }
+
+        // === Canvas Pool (reuse offscreen canvases) ===
+        const canvasPool = [];
+        function getPooledCanvas() {
+            return canvasPool.pop() || document.createElement('canvas');
+        }
+        function returnCanvas(c) {
+            if (canvasPool.length < 5) canvasPool.push(c);
+        }
 
         const canvas = document.getElementById('pdfCanvas');
         const ctx = canvas.getContext('2d');
@@ -955,14 +1150,44 @@
         const welcomeMsg = document.getElementById('welcomeMessage');
         const loadingMsg = document.getElementById('loadingMessage');
         const pageWrapper = document.getElementById('pageWrapper');
+        const skeleton = document.getElementById('skeletonShimmer');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        const hamburgerBtn = document.getElementById('hamburgerBtn');
+        const viewerContainer = document.getElementById('viewerContainer');
+
+        // === Responsive: Auto-scale PDF to container width ===
+        function getAutoScale(page) {
+            const containerW = viewerContainer.clientWidth - 32; // padding
+            const defaultVP = page.getViewport({ scale: 1.0 });
+            if (window.innerWidth <= 768 || defaultVP.width > containerW) {
+                return Math.min(containerW / defaultVP.width, 2.0);
+            }
+            return scale;
+        }
+
+        // === Hamburger Sidebar Toggle ===
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            sidebarBackdrop.classList.toggle('active');
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            sidebarBackdrop.classList.remove('active');
+        }
+        hamburgerBtn.addEventListener('click', toggleSidebar);
+        sidebarBackdrop.addEventListener('click', closeSidebar);
 
         // Populate Sidebar
-        topics.forEach((topic, index) => {
+        topics.forEach((topic) => {
             const li = document.createElement('li');
             const btn = document.createElement('button');
             btn.className = 'topic-btn';
             btn.innerText = topic.name.replace(/_/g, ' ');
-            btn.onclick = () => loadPDF(topic.pdf, btn, topic.name, topic.spotify_link);
+            btn.onclick = () => {
+                loadPDF(topic.pdf, btn, topic.name, topic.spotify_link);
+                closeSidebar();
+            };
             li.appendChild(btn);
             topicList.appendChild(li);
         });
@@ -972,7 +1197,6 @@
         }
 
         async function loadPDF(url, btnElement, topicName, spotifyLink) {
-            // Increment generation — any in-flight renders from previous load are now stale
             const myGeneration = ++loadGeneration;
 
             document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
@@ -981,6 +1205,7 @@
 
             welcomeMsg.style.display = 'none';
             pageWrapper.classList.remove('active');
+            skeleton.classList.remove('active');
 
             const progressBar = document.getElementById('progressBar');
             const loadingText = document.getElementById('loadingText');
@@ -1017,19 +1242,22 @@
             try {
                 const loadingTask = pdfjsLib.getDocument({
                     url: encodedUrl,
+                    disableRange: false,
+                    disableStream: false,
+                    rangeChunkSize: 65536,
                     disableFontFace: true,
-                    cMapPacked: true
+                    cMapPacked: true,
+                    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                    standardFontDataUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/'
                 });
                 loadingTask.onProgress = (progress) => {
-                    if (myGeneration !== loadGeneration) return; // Stale
+                    if (myGeneration !== loadGeneration) return;
                     if (progress.total > 0) {
                         const pct = Math.round((progress.loaded / progress.total) * 100);
                         progressBar.style.width = pct + '%';
                     }
                 };
                 const doc = await loadingTask.promise;
-
-                // Check if user switched to another topic while we were loading
                 if (myGeneration !== loadGeneration) return;
 
                 pdfDoc = doc;
@@ -1045,11 +1273,11 @@
             }
         }
 
-        // Render a page to an offscreen canvas using an explicit doc reference
+        // Render page to pooled offscreen canvas
         async function renderToCanvas(doc, num, renderScale) {
             const page = await doc.getPage(num);
             const viewport = page.getViewport({ scale: renderScale });
-            const offscreen = document.createElement('canvas');
+            const offscreen = getPooledCanvas();
             offscreen.width = viewport.width;
             offscreen.height = viewport.height;
             const offCtx = offscreen.getContext('2d');
@@ -1063,26 +1291,28 @@
             ctx.drawImage(result.canvas, 0, 0, displayWidth, displayHeight);
         }
 
-        // Prefetch adjacent pages — with generation check
+        // Prefetch adjacent pages with requestIdleCallback
+        const scheduleIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 100));
         function prefetchPages(num, doc, url, gen) {
             const pages = [];
             if (num + 1 <= doc.numPages) pages.push(num + 1);
             if (num - 1 >= 1) pages.push(num - 1);
             if (num + 2 <= doc.numPages) pages.push(num + 2);
+            if (num + 3 <= doc.numPages) pages.push(num + 3);
 
             pages.forEach(p => {
                 const key = pageCacheKey(url, p, scale);
                 if (!renderedPageCache[key]) {
-                    setTimeout(() => {
-                        if (gen !== loadGeneration) return; // Stale — user switched topic
+                    scheduleIdle(() => {
+                        if (gen !== loadGeneration) return;
                         if (!renderedPageCache[key]) {
                             renderToCanvas(doc, p, scale).then(result => {
                                 if (gen === loadGeneration) {
-                                    renderedPageCache[key] = result;
+                                    lruSet(key, result);
                                 }
                             }).catch(() => { });
                         }
-                    }, 150);
+                    });
                 }
             });
         }
@@ -1092,16 +1322,24 @@
             const myGeneration = loadGeneration;
             const myDoc = pdfDoc;
             const myUrl = currentPdfUrl;
+
+            // Auto-scale on mobile
+            const firstPage = await myDoc.getPage(num);
+            if (myGeneration !== loadGeneration) { pageRendering = false; return; }
+            const effectiveScale = getAutoScale(firstPage);
+            scale = effectiveScale;
+
             const fullKey = pageCacheKey(myUrl, num, scale);
 
-            // Update UI immediately
+            // Update UI
             pageInfo.textContent = `Page ${num} of ${myDoc.numPages}`;
             prevBtn.disabled = num <= 1;
             nextBtn.disabled = num >= myDoc.numPages;
 
-            // === CASE 1: Full-res cached — INSTANT ===
-            if (renderedPageCache[fullKey]) {
-                const cached = renderedPageCache[fullKey];
+            // CASE 1: Cached — instant display
+            const cached = lruGet(fullKey);
+            if (cached) {
+                skeleton.classList.remove('active');
                 displayOnCanvas(cached, cached.width, cached.height);
                 canvas.style.opacity = '1';
                 pageRendering = false;
@@ -1113,26 +1351,26 @@
                 return;
             }
 
-            // === CASE 2: Progressive — low-res first, then full quality ===
+            // Show skeleton shimmer
+            const fullViewport = firstPage.getViewport({ scale });
+            canvas.width = fullViewport.width;
+            canvas.height = fullViewport.height;
+            skeleton.classList.add('active');
+
+            // CASE 2: Progressive rendering
             try {
-                // Get full viewport dimensions
-                const page = await myDoc.getPage(num);
-                if (myGeneration !== loadGeneration) { pageRendering = false; return; }
-
-                const fullViewport = page.getViewport({ scale: scale });
-                const displayW = fullViewport.width;
-                const displayH = fullViewport.height;
-
-                // Step 1: Low-res preview (fast)
+                // Low-res preview
                 const lowRes = await renderToCanvas(myDoc, num, LOW_RES_SCALE);
                 if (myGeneration !== loadGeneration) { pageRendering = false; return; }
-                displayOnCanvas(lowRes, displayW, displayH);
+                displayOnCanvas(lowRes, fullViewport.width, fullViewport.height);
+                returnCanvas(lowRes.canvas);
                 canvas.style.opacity = '1';
+                skeleton.classList.remove('active');
 
-                // Step 2: Full quality render and swap
+                // Full quality
                 const fullRes = await renderToCanvas(myDoc, num, scale);
                 if (myGeneration !== loadGeneration) { pageRendering = false; return; }
-                renderedPageCache[fullKey] = fullRes;
+                lruSet(fullKey, fullRes);
                 displayOnCanvas(fullRes, fullRes.width, fullRes.height);
 
                 pageRendering = false;
@@ -1141,9 +1379,8 @@
                     renderPage(p);
                 }
             } catch (err) {
-                if (myGeneration === loadGeneration) {
-                    console.error('Error rendering page:', err);
-                }
+                if (myGeneration === loadGeneration) console.error('Render error:', err);
+                skeleton.classList.remove('active');
                 pageRendering = false;
             }
 
@@ -1153,89 +1390,63 @@
         }
 
         function queueRenderPage(num) {
-            if (pageRendering) {
-                pageNumPending = num;
-            } else {
-                renderPage(num);
-            }
+            if (pageRendering) { pageNumPending = num; } else { renderPage(num); }
         }
 
-        function onPrevPage() {
-            if (pageNum <= 1) return;
-            pageNum--;
-            queueRenderPage(pageNum);
-        }
-
-        function onNextPage() {
-            if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
-            pageNum++;
-            queueRenderPage(pageNum);
-        }
-
-        function zoomIn() {
-            scale = Math.min(scale * 1.2, 3);
-            if (pdfDoc) renderPage(pageNum);
-        }
-
-        function zoomOut() {
-            scale = Math.max(scale / 1.2, 0.5);
-            if (pdfDoc) renderPage(pageNum);
-        }
+        function onPrevPage() { if (pageNum <= 1) return; pageNum--; queueRenderPage(pageNum); }
+        function onNextPage() { if (!pdfDoc || pageNum >= pdfDoc.numPages) return; pageNum++; queueRenderPage(pageNum); }
+        function zoomIn() { scale = Math.min(scale * 1.2, 3); if (pdfDoc) renderPage(pageNum); }
+        function zoomOut() { scale = Math.max(scale / 1.2, 0.5); if (pdfDoc) renderPage(pageNum); }
 
         prevBtn.addEventListener('click', onPrevPage);
         nextBtn.addEventListener('click', onNextPage);
         document.getElementById('zoomIn').addEventListener('click', zoomIn);
         document.getElementById('zoomOut').addEventListener('click', zoomOut);
 
+        // === Touch Swipe Navigation ===
+        let touchStartX = 0;
+        let touchStartY = 0;
+        viewerContainer.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+        viewerContainer.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].screenX - touchStartX;
+            const dy = e.changedTouches[0].screenY - touchStartY;
+            if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+                if (dx < 0) onNextPage();
+                else onPrevPage();
+            }
+        }, { passive: true });
+
+        // === Debounced Resize Handler ===
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                if (pdfDoc) renderPage(pageNum);
+            }, 250);
+        });
+
         // Keyboard navigation + download prevention
         document.addEventListener('keydown', (e) => {
-            // Block Ctrl+S (save), Ctrl+P (print), Ctrl+U (view source)
             if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(e.key.toLowerCase())) {
-                e.preventDefault();
-                e.stopPropagation();
-                return false;
+                e.preventDefault(); e.stopPropagation(); return false;
             }
-            // Block Ctrl+Shift+I (DevTools), Ctrl+Shift+J (Console)
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j'].includes(e.key.toLowerCase())) {
-                e.preventDefault();
-                e.stopPropagation();
-                return false;
+                e.preventDefault(); e.stopPropagation(); return false;
             }
-            // Block F12 (DevTools)
-            if (e.key === 'F12') {
-                e.preventDefault();
-                e.stopPropagation();
-                return false;
-            }
-            // Block PrintScreen
-            if (e.key === 'PrintScreen') {
-                e.preventDefault();
-                return false;
-            }
-
+            if (e.key === 'F12') { e.preventDefault(); e.stopPropagation(); return false; }
+            if (e.key === 'PrintScreen') { e.preventDefault(); return false; }
             if (!pdfDoc) return;
             switch (e.key) {
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    onPrevPage();
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    onNextPage();
-                    break;
-                case '+':
-                case '=':
-                    e.preventDefault();
-                    zoomIn();
-                    break;
-                case '-':
-                    e.preventDefault();
-                    zoomOut();
-                    break;
+                case 'ArrowLeft': e.preventDefault(); onPrevPage(); break;
+                case 'ArrowRight': e.preventDefault(); onNextPage(); break;
+                case '+': case '=': e.preventDefault(); zoomIn(); break;
+                case '-': e.preventDefault(); zoomOut(); break;
             }
         });
 
-        // Block drag events on the entire document
         document.addEventListener('dragstart', (e) => e.preventDefault());
         document.addEventListener('drop', (e) => e.preventDefault());
     </script>
