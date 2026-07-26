@@ -16,6 +16,7 @@ body {
 .layout {
     display: flex;
     height: 100vh;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -74,6 +75,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
     overflow-y: auto;
 }
 
@@ -358,9 +360,10 @@ body {
     }
 
     .header {
-        padding: 0.6rem 1rem;
+        padding: 0.75rem 0.9rem;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: 0.6rem;
+        align-items: flex-start;
     }
 
     .title {
@@ -375,6 +378,8 @@ body {
     .controls {
         gap: 0.5rem;
         flex-wrap: wrap;
+        width: 100%;
+        justify-content: flex-start;
     }
 
     .nav-btn {
@@ -391,6 +396,10 @@ body {
         padding: 1rem;
     }
 
+    .page-wrapper {
+        max-width: 100%;
+    }
+
     .audio-section {
         padding: 0.5rem 1rem;
     }
@@ -402,6 +411,10 @@ body {
 
 /* ===== RESPONSIVE: Phone (≤480px) ===== */
 @media (max-width: 480px) {
+    .sidebar {
+        width: min(86vw, 300px);
+    }
+
     .header {
         padding: 0.5rem 0.6rem;
     }
@@ -413,6 +426,12 @@ body {
     .controls {
         width: 100%;
         justify-content: center;
+    }
+
+    .page-info {
+        order: 3;
+        width: 100%;
+        text-align: center;
     }
 
     .nav-btn {
@@ -433,5 +452,56 @@ body {
     .welcome-message {
         padding: 2rem 1rem;
         font-size: 1rem;
+    }
+
+    .audio-section iframe {
+        height: 72px;
+    }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+    .header {
+        padding: 0.55rem 0.9rem;
+        gap: 0.4rem;
+    }
+
+    .title {
+        font-size: 0.95rem;
+    }
+
+    .controls {
+        gap: 0.4rem;
+    }
+
+    .nav-btn {
+        padding: 0.35rem 0.7rem;
+        font-size: 0.75rem;
+    }
+
+    .page-info {
+        padding: 0.3rem 0.65rem;
+        font-size: 0.75rem;
+    }
+
+    .viewer-container {
+        padding: 0.75rem;
+    }
+
+    .audio-section {
+        padding: 0.4rem 0.8rem;
+    }
+
+    .audio-section iframe {
+        height: 64px;
+    }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+    .audio-section {
+        display: none;
+    }
+
+    .viewer-container {
+        padding-bottom: 0.75rem;
     }
 }
