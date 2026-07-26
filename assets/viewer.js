@@ -362,7 +362,7 @@ function displayOnCanvas(result, displayWidth, displayHeight) {
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(result.canvas, 0, 0, displayWidth, displayHeight);
+    ctx.drawImage(result.canvas, 0, 0, canvas.width, canvas.height);
 }
 
 // Prefetch adjacent pages with requestIdleCallback
