@@ -397,21 +397,22 @@ body {
     }
 
     .viewer-container {
-        padding: 1rem;
+        padding: 0.8rem;
         align-items: stretch;
     }
 
     .page-wrapper {
         max-width: 100%;
         margin: 0 auto;
+        width: fit-content;
     }
 
     .audio-section {
-        padding: 0.5rem 1rem;
+        padding: 0.6rem 0.8rem;
     }
 
     .audio-section iframe {
-        height: 80px;
+        height: 96px;
     }
 }
 
@@ -453,7 +454,7 @@ body {
     }
 
     .viewer-container {
-        padding: 0.5rem;
+        padding: 0.4rem;
     }
 
     .welcome-message {
@@ -462,7 +463,7 @@ body {
     }
 
     .audio-section iframe {
-        height: 72px;
+        height: 76px;
     }
 }
 
@@ -499,24 +500,20 @@ body {
     }
 
     .viewer-container {
-        padding: 0.5rem 0.75rem 0.75rem;
+        padding: 0.35rem 0.65rem 0.55rem;
         align-items: center;
     }
 
     .audio-section {
-        padding: 0.4rem 0.8rem;
+        padding: 0.35rem 0.65rem;
     }
 
     .audio-section iframe {
-        height: 64px;
+        height: 72px;
     }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
-    .audio-section {
-        display: none;
-    }
-
     .sidebar-header {
         padding: 1rem 1.1rem;
         font-size: 1rem;
@@ -533,6 +530,10 @@ body {
     }
 
     .page-wrapper {
-        max-height: calc(100dvh - 110px);
+        max-height: calc(100dvh - 92px);
+    }
+
+    .audio-section iframe {
+        height: 64px;
     }
 }
