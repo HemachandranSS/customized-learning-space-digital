@@ -32,11 +32,13 @@ body {
 
 .sidebar-header {
     padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.1);
+    background: #1c2b4a;
+    backdrop-filter: blur(10px);
     font-size: 1.2rem;
     font-weight: 600;
     position: sticky;
     top: 0;
+    z-index: 2;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
@@ -85,19 +87,29 @@ body {
     padding: 1rem 2rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
 }
 
 .title {
     font-size: 1.2rem;
     font-weight: 600;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .controls {
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    justify-content: flex-end;
 }
 
 .nav-btn {
@@ -146,8 +158,21 @@ body {
     font-weight: bold;
 }
 
-.zoom-btn:hover {
+.zoom-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.3);
+}
+
+.zoom-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.zoom-level {
+    font-size: 0.8rem;
+    min-width: 3ch;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.85);
+    user-select: none;
 }
 
 .viewer-container {
@@ -340,6 +365,25 @@ body {
 @media print {
     body {
         display: none !important;
+    }
+}
+
+/* ===== RESPONSIVE: Small laptop / large tablet (≤1024px) ===== */
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 260px;
+    }
+
+    .header {
+        padding: 0.9rem 1.5rem;
+    }
+
+    .title {
+        font-size: 1.1rem;
+    }
+
+    .controls {
+        gap: 0.75rem;
     }
 }
 

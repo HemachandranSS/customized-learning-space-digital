@@ -8,6 +8,9 @@ let pageNum = 1;
 let pageRendering = false;
 let pageNumPending = null;
 let scale = 1.0;
+let zoomFactor = 1.0; // user-controlled multiplier on top of the auto-fit scale
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3.0;
 const LOW_RES_SCALE = 0.4;
 const DEVICE_PIXEL_RATIO = Math.max(window.devicePixelRatio || 1, 1);
 let currentPdfUrl = '';
@@ -210,7 +213,7 @@ function prefetchTopicDocument(topic, btn) {
 async function prefetchFirstPage(doc, url) {
     try {
         const page = await doc.getPage(1);
-        const predictedScale = getAutoScale(page) || scale;
+        const predictedScale = (getAutoScale(page) || scale) * zoomFactor;
         const key = pageCacheKey(url, 1, predictedScale);
         if (lruHas(key)) return;
         const result = await renderToCanvas(doc, 1, predictedScale);
@@ -266,6 +269,7 @@ async function loadPDF(url, btnElement, topicName, spotifyLink, topicIndex) {
     document.querySelectorAll('.topic-btn').forEach(b => b.classList.remove('active'));
     if (btnElement) btnElement.classList.add('active');
     currentTopicLabel.innerText = topicName.replace(/_/g, ' ');
+    currentTopicLabel.title = topicName.replace(/_/g, ' ');
     currentTopicIndex = typeof topicIndex === 'number' ? topicIndex : topics.findIndex(t => t.pdf === url);
 
     welcomeMsg.style.display = 'none';
@@ -276,6 +280,8 @@ async function loadPDF(url, btnElement, topicName, spotifyLink, topicIndex) {
     pageNum = 1;
     pageRendering = false;
     pageNumPending = null;
+    zoomFactor = 1.0;
+    updateZoomButtons();
 
     // Update Spotify
     const spotifyPlayer = document.getElementById('spotifyPlayer');
@@ -394,8 +400,8 @@ async function renderPage(num) {
     // Auto-scale on mobile
     const firstPage = await myDoc.getPage(num);
     if (myGeneration !== loadGeneration) { pageRendering = false; return; }
-    const effectiveScale = getAutoScale(firstPage);
-    scale = effectiveScale;
+    const autoScale = getAutoScale(firstPage);
+    scale = autoScale * zoomFactor;
 
     const fullKey = pageCacheKey(myUrl, num, scale);
 
@@ -465,13 +471,34 @@ function queueRenderPage(num) {
 
 function onPrevPage() { if (pageNum <= 1) return; pageNum--; queueRenderPage(pageNum); }
 function onNextPage() { if (!pdfDoc || pageNum >= pdfDoc.numPages) return; pageNum++; queueRenderPage(pageNum); }
-function zoomIn() { scale = Math.min(scale * 1.2, 3); if (pdfDoc) renderPage(pageNum); }
-function zoomOut() { scale = Math.max(scale / 1.2, 0.5); if (pdfDoc) renderPage(pageNum); }
+const zoomInBtn = document.getElementById('zoomIn');
+const zoomOutBtn = document.getElementById('zoomOut');
+const zoomLevelLabel = document.getElementById('zoomLevel');
+
+function updateZoomButtons() {
+    if (zoomInBtn) zoomInBtn.disabled = zoomFactor >= MAX_ZOOM - 0.001;
+    if (zoomOutBtn) zoomOutBtn.disabled = zoomFactor <= MIN_ZOOM + 0.001;
+    if (zoomLevelLabel) zoomLevelLabel.textContent = Math.round(zoomFactor * 100) + '%';
+}
+
+function zoomIn() {
+    if (!pdfDoc || pageRendering) return;
+    zoomFactor = Math.min(zoomFactor * 1.2, MAX_ZOOM);
+    updateZoomButtons();
+    renderPage(pageNum);
+}
+function zoomOut() {
+    if (!pdfDoc || pageRendering) return;
+    zoomFactor = Math.max(zoomFactor / 1.2, MIN_ZOOM);
+    updateZoomButtons();
+    renderPage(pageNum);
+}
 
 prevBtn.addEventListener('click', onPrevPage);
 nextBtn.addEventListener('click', onNextPage);
-document.getElementById('zoomIn').addEventListener('click', zoomIn);
-document.getElementById('zoomOut').addEventListener('click', zoomOut);
+if (zoomInBtn) zoomInBtn.addEventListener('click', zoomIn);
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', zoomOut);
+updateZoomButtons();
 
 // === Touch Swipe Navigation ===
 let touchStartX = 0;
