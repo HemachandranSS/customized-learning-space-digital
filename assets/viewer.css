@@ -451,7 +451,7 @@ body {
 
     .viewer-container {
         padding: 0.8rem;
-        align-items: stretch;
+        align-items: flex-start;
         min-height: 0;
     }
 
