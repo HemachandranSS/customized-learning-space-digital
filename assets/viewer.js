@@ -149,12 +149,27 @@ const viewerContainer = document.getElementById('viewerContainer');
 
 // === Responsive: Auto-scale PDF to container width ===
 function getAutoScale(page) {
-    const containerW = viewerContainer.clientWidth - 32; // padding
     const defaultVP = page.getViewport({ scale: 1.0 });
-    if (window.innerWidth <= 768 || defaultVP.width > containerW) {
-        return Math.min(containerW / defaultVP.width, 2.0);
+    const containerW = Math.max(viewerContainer.clientWidth - 24, 120);
+    const containerH = Math.max(viewerContainer.clientHeight - 24, 120);
+    const fitWidth = containerW / defaultVP.width;
+    const fitHeight = containerH / defaultVP.height;
+    const isMobile = window.innerWidth <= 900;
+    const targetScale = isMobile ? Math.min(fitWidth, fitHeight) : fitWidth;
+    return Math.min(targetScale, 2.0);
+}
+
+function syncMobileLayout() {
+    const isMobile = window.innerWidth <= 900;
+    const isLandscape = window.matchMedia('(orientation: landscape)').matches;
+
+    if (isMobile && isLandscape) {
+        closeSidebar();
     }
-    return scale;
+
+    if (!isMobile) {
+        closeSidebar();
+    }
 }
 
 // === Hamburger Sidebar Toggle ===
@@ -168,6 +183,9 @@ function closeSidebar() {
 }
 hamburgerBtn.addEventListener('click', toggleSidebar);
 sidebarBackdrop.addEventListener('click', closeSidebar);
+window.addEventListener('resize', syncMobileLayout);
+window.addEventListener('orientationchange', syncMobileLayout);
+syncMobileLayout();
 
 // === Hover-to-prefetch: start warming a PDF as soon as the pointer
 // rests on its sidebar entry, so a click lands on an already-loaded doc ===
