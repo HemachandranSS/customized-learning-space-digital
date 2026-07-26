@@ -9,6 +9,7 @@ let pageRendering = false;
 let pageNumPending = null;
 let scale = 1.0;
 const LOW_RES_SCALE = 0.4;
+const DEVICE_PIXEL_RATIO = Math.max(window.devicePixelRatio || 1, 1);
 let currentPdfUrl = '';
 let loadGeneration = 0;
 let currentTopicIndex = -1;
@@ -313,20 +314,30 @@ async function loadPDF(url, btnElement, topicName, spotifyLink, topicIndex) {
 }
 
 // Render page to pooled offscreen canvas
-async function renderToCanvas(doc, num, renderScale) {
+async function renderToCanvas(doc, num, renderScale, pixelRatio = DEVICE_PIXEL_RATIO) {
     const page = await doc.getPage(num);
-    const viewport = page.getViewport({ scale: renderScale });
+    const viewport = page.getViewport({ scale: renderScale * pixelRatio });
     const offscreen = getPooledCanvas();
     offscreen.width = viewport.width;
     offscreen.height = viewport.height;
     const offCtx = offscreen.getContext('2d');
+    offCtx.setTransform(1, 0, 0, 1, 0, 0);
     await page.render({ canvasContext: offCtx, viewport }).promise;
-    return { canvas: offscreen, width: viewport.width, height: viewport.height };
+    return {
+        canvas: offscreen,
+        width: viewport.width / pixelRatio,
+        height: viewport.height / pixelRatio,
+        pixelRatio
+    };
 }
 
 function displayOnCanvas(result, displayWidth, displayHeight) {
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
+    const pixelRatio = result.pixelRatio || DEVICE_PIXEL_RATIO;
+    canvas.width = Math.round(displayWidth * pixelRatio);
+    canvas.height = Math.round(displayHeight * pixelRatio);
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(result.canvas, 0, 0, displayWidth, displayHeight);
 }
 
@@ -392,8 +403,10 @@ async function renderPage(num) {
 
     // Show skeleton shimmer
     const fullViewport = firstPage.getViewport({ scale });
-    canvas.width = fullViewport.width;
-    canvas.height = fullViewport.height;
+    canvas.width = Math.round(fullViewport.width * DEVICE_PIXEL_RATIO);
+    canvas.height = Math.round(fullViewport.height * DEVICE_PIXEL_RATIO);
+    canvas.style.width = `${fullViewport.width}px`;
+    canvas.style.height = `${fullViewport.height}px`;
     skeleton.classList.add('active');
 
     // CASE 2: Progressive rendering
