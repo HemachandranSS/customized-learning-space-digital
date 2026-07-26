@@ -345,6 +345,15 @@ body {
 
 /* ===== RESPONSIVE: Tablet (≤768px) ===== */
 @media (max-width: 768px) {
+    body {
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    .layout {
+        height: 100dvh;
+    }
+
     .hamburger-btn {
         display: block;
     }
@@ -399,20 +408,23 @@ body {
     .viewer-container {
         padding: 0.8rem;
         align-items: stretch;
+        min-height: 0;
     }
 
     .page-wrapper {
         max-width: 100%;
         margin: 0 auto;
-        width: fit-content;
+        width: auto;
+        max-height: 100%;
     }
 
     .audio-section {
         padding: 0.6rem 0.8rem;
+        flex: 0 0 auto;
     }
 
     .audio-section iframe {
-        height: 96px;
+        height: 92px;
     }
 }
 
@@ -455,6 +467,7 @@ body {
 
     .viewer-container {
         padding: 0.4rem;
+        min-height: 0;
     }
 
     .welcome-message {
@@ -463,13 +476,22 @@ body {
     }
 
     .audio-section iframe {
-        height: 76px;
+        height: 72px;
     }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
+    body {
+        height: 100dvh;
+        overflow: hidden;
+    }
+
     .layout {
         height: 100dvh;
+    }
+
+    .main-content {
+        overflow: hidden;
     }
 
     .header {
@@ -502,6 +524,7 @@ body {
     .viewer-container {
         padding: 0.35rem 0.65rem 0.55rem;
         align-items: center;
+        min-height: 0;
     }
 
     .audio-section {
