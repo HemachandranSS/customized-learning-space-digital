@@ -408,10 +408,5 @@ const topics = [
         "name": "Module 72 -  Hydroponics, PPV & FR Act, 2001 & The Seeds Act, 1966.pdf",
         "pdf": "Module 72 -  Hydroponics, PPV & FR Act, 2001 & The Seeds Act, 1966.pdf",
         "spotify_link": "https://open.spotify.com/episode/0jH8jUAKSaYQYF4sPKEKuW?si=v3CIUog-QiSdk3YMC8dlKA"
-    },
-    {
-        "name": "Economy Lectures - Level II (Static) - eBook.pdf",
-        "pdf": "Economy Lectures - Level II (Static) - eBook.pdf",
-        "spotify_link": ""
     }
 ];
