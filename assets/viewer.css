@@ -28,6 +28,16 @@ body {
     border-right: 1px solid rgba(255, 255, 255, 0.2);
     overflow-y: auto;
     flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: -320px;
+    height: 100vh;
+    z-index: 100;
+    transition: left 0.3s ease;
+}
+
+.sidebar.open {
+    left: 0;
 }
 
 .sidebar-header {
@@ -79,6 +89,7 @@ body {
     flex-direction: column;
     min-width: 0;
     overflow-y: auto;
+    margin-left: 0;
 }
 
 .header {
@@ -226,9 +237,21 @@ body {
 
 /* Spotify Section */
 .audio-section {
-    padding: 1rem 2rem;
+    padding: 0.35rem 2rem 0;
     background: rgba(0, 0, 0, 0.5);
     border-top: 1px solid rgba(255, 255, 255, 0.2);
+    max-height: 18px;
+    opacity: 0.35;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+}
+
+.audio-section.visible,
+.audio-section:hover,
+.audio-section:focus-within {
+    max-height: 220px;
+    opacity: 1;
+    padding: 1rem 2rem;
 }
 
 .audio-section iframe {
@@ -329,7 +352,6 @@ body {
 
 /* Hamburger Button */
 .hamburger-btn {
-    display: none;
     background: rgba(255, 255, 255, 0.2);
     border: none;
     color: white;
@@ -370,10 +392,6 @@ body {
 
 /* ===== RESPONSIVE: Small laptop / large tablet (≤1024px) ===== */
 @media (max-width: 1024px) {
-    .sidebar {
-        width: 260px;
-    }
-
     .header {
         padding: 0.9rem 1.5rem;
     }
@@ -403,13 +421,8 @@ body {
     }
 
     .sidebar {
-        position: fixed;
-        top: 0;
-        left: -300px;
-        height: 100dvh;
-        z-index: 100;
-        transition: left 0.3s ease;
         width: 280px;
+        height: 100dvh;
     }
 
     .sidebar.open {

@@ -162,34 +162,6 @@ function getAutoScale(page) {
     return Math.min(targetScale, 2.0);
 }
 
-function syncMobileLayout() {
-    const isMobile = window.innerWidth <= 900;
-    const isLandscape = window.matchMedia('(orientation: landscape)').matches;
-
-    if (isMobile && isLandscape) {
-        closeSidebar();
-    }
-
-    if (!isMobile) {
-        closeSidebar();
-    }
-}
-
-// === Hamburger Sidebar Toggle ===
-function toggleSidebar() {
-    sidebar.classList.toggle('open');
-    sidebarBackdrop.classList.toggle('active');
-}
-function closeSidebar() {
-    sidebar.classList.remove('open');
-    sidebarBackdrop.classList.remove('active');
-}
-hamburgerBtn.addEventListener('click', toggleSidebar);
-sidebarBackdrop.addEventListener('click', closeSidebar);
-window.addEventListener('resize', syncMobileLayout);
-window.addEventListener('orientationchange', syncMobileLayout);
-syncMobileLayout();
-
 // === Hover-to-prefetch: start warming a PDF as soon as the pointer
 // rests on its sidebar entry, so a click lands on an already-loaded doc ===
 const HOVER_PREFETCH_DELAY = 130; // ms
