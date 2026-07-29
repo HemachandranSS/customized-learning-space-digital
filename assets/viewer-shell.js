@@ -1,6 +1,4 @@
 const viewerShell = (() => {
-    let hideSpotifyTimer = null;
-
     function getElement(id) {
         return document.getElementById(id);
     }
@@ -28,21 +26,21 @@ const viewerShell = (() => {
         else openSidebar();
     }
 
-    function showSpotify() {
+    function setSpotifyExpanded(expanded) {
         const audioSection = getElement('audioSection');
+        const spotifyToggle = getElement('spotifyToggle');
         if (!audioSection) return;
-        audioSection.classList.add('visible');
-        if (hideSpotifyTimer) clearTimeout(hideSpotifyTimer);
-        hideSpotifyTimer = setTimeout(() => {
-            audioSection.classList.remove('visible');
-        }, 2500);
+        audioSection.classList.toggle('visible', expanded);
+        if (spotifyToggle) {
+            spotifyToggle.setAttribute('aria-expanded', String(expanded));
+            spotifyToggle.textContent = expanded ? 'Hide Spotify' : 'Show Spotify';
+        }
     }
 
-    function hideSpotify() {
+    function toggleSpotify() {
         const audioSection = getElement('audioSection');
         if (!audioSection) return;
-        if (hideSpotifyTimer) clearTimeout(hideSpotifyTimer);
-        audioSection.classList.remove('visible');
+        setSpotifyExpanded(!audioSection.classList.contains('visible'));
     }
 
     function bindSidebar() {
@@ -60,25 +58,28 @@ const viewerShell = (() => {
         const audioSection = getElement('audioSection');
         if (!audioSection) return;
 
-        let pointerTimer = null;
-        const reveal = () => {
-            showSpotify();
-            if (pointerTimer) clearTimeout(pointerTimer);
-            pointerTimer = setTimeout(() => hideSpotify(), 2500);
-        };
+        let spotifyToggle = getElement('spotifyToggle');
+        if (!spotifyToggle) {
+            spotifyToggle = document.createElement('button');
+            spotifyToggle.id = 'spotifyToggle';
+            spotifyToggle.className = 'spotify-toggle';
+            spotifyToggle.type = 'button';
+            spotifyToggle.setAttribute('aria-expanded', 'false');
+            spotifyToggle.textContent = 'Show Spotify';
+            audioSection.prepend(spotifyToggle);
+        }
 
-        document.addEventListener('pointermove', reveal, { passive: true });
-        audioSection.addEventListener('touchstart', reveal, { passive: true });
+        spotifyToggle.addEventListener('click', toggleSpotify);
     }
 
     function init() {
         bindSidebar();
         bindSpotify();
         closeSidebar();
-        hideSpotify();
+        setSpotifyExpanded(false);
     }
 
-    return { init, openSidebar, closeSidebar, toggleSidebar, showSpotify, hideSpotify };
+    return { init, openSidebar, closeSidebar, toggleSidebar, setSpotifyExpanded, toggleSpotify };
 })();
 
 document.addEventListener('DOMContentLoaded', () => viewerShell.init());

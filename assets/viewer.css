@@ -240,18 +240,47 @@ body {
     padding: 0.35rem 2rem 0;
     background: rgba(0, 0, 0, 0.5);
     border-top: 1px solid rgba(255, 255, 255, 0.2);
-    max-height: 18px;
+    max-height: 56px;
     opacity: 0.35;
     overflow: hidden;
     transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
 }
 
 .audio-section.visible,
-.audio-section:hover,
 .audio-section:focus-within {
-    max-height: 220px;
+    max-height: 280px;
     opacity: 1;
     padding: 1rem 2rem;
+}
+
+.spotify-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.16);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+    margin-bottom: 0.7rem;
+}
+
+.spotify-toggle:hover {
+    background: rgba(255, 255, 255, 0.24);
+    transform: translateY(-1px);
+}
+
+.spotify-toggle:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}
+
+.audio-section:not(.visible) iframe {
+    pointer-events: none;
 }
 
 .audio-section iframe {
