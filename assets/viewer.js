@@ -235,6 +235,36 @@ function pageCacheKey(url, num, s) {
     return `${url}:${num}:${s.toFixed(2)}`;
 }
 
+function buildSpotifyEmbedUrl(spotifyLink) {
+    if (!spotifyLink || typeof spotifyLink !== 'string') return '';
+
+    try {
+        const url = new URL(spotifyLink);
+        if (!url.hostname.includes('spotify.com')) return '';
+
+        const parts = url.pathname.split('/').filter(Boolean);
+        if (parts.length < 2) return '';
+
+        const [resourceType, resourceId] = parts;
+        if (!resourceType || !resourceId) return '';
+
+        return `https://open.spotify.com/embed/${resourceType}/${resourceId}?utm_source=generator`;
+    } catch (error) {
+        return '';
+    }
+}
+
+function buildSpotifyOpenUrl(spotifyLink) {
+    if (!spotifyLink || typeof spotifyLink !== 'string') return '';
+    try {
+        const url = new URL(spotifyLink);
+        if (!url.hostname.includes('spotify.com')) return '';
+        return `${url.origin}${url.pathname}`;
+    } catch (error) {
+        return '';
+    }
+}
+
 async function loadPDF(url, btnElement, topicName, spotifyLink, topicIndex) {
     const myGeneration = ++loadGeneration;
 
@@ -257,11 +287,23 @@ async function loadPDF(url, btnElement, topicName, spotifyLink, topicIndex) {
 
     // Update Spotify
     const spotifyPlayer = document.getElementById('spotifyPlayer');
-    if (spotifyLink) {
-        const embedUrl = spotifyLink.replace('open.spotify.com/', 'open.spotify.com/embed/').split('?')[0] + '?utm_source=generator';
-        spotifyPlayer.src = embedUrl;
-    } else {
-        spotifyPlayer.src = 'https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?utm_source=generator';
+    const spotifyLinkFallback = document.getElementById('spotifyLinkFallback');
+    if (spotifyPlayer) {
+        const embedUrl = buildSpotifyEmbedUrl(spotifyLink);
+        const openUrl = buildSpotifyOpenUrl(spotifyLink);
+        spotifyPlayer.src = embedUrl || 'https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?utm_source=generator';
+        spotifyPlayer.title = embedUrl ? 'Spotify player for the selected topic' : 'Spotify playlist player';
+        spotifyPlayer.dataset.spotifyFallbackUrl = openUrl;
+        if (spotifyLinkFallback) {
+            if (openUrl) {
+                spotifyLinkFallback.href = openUrl;
+                spotifyLinkFallback.textContent = 'Open in Spotify';
+                spotifyLinkFallback.hidden = false;
+            } else {
+                spotifyLinkFallback.hidden = true;
+                spotifyLinkFallback.removeAttribute('href');
+            }
+        }
     }
 
     const encodedUrl = encodeURI(url);

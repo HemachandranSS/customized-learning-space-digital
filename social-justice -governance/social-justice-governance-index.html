@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link rel="stylesheet" href="../assets/viewer.css">
 </head>
+
 <body>
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
     <div class="layout">
@@ -30,32 +32,32 @@
                 </div>
             </div>
             <div class="viewer-container" id="viewerContainer" oncontextmenu="return false;">
-                <div class="welcome-message" id="welcomeMessage">📚 Select a topic from the sidebar to start reading!</div>
+                <div class="welcome-message" id="welcomeMessage">📚 Select a topic from the sidebar to start reading!
+                </div>
                 <div class="loading" id="loadingMessage">
                     <div class="spinner"></div>
                     <div id="loadingText">Loading PDF...</div>
-                    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
                 </div>
                 <div class="page-wrapper" id="pageWrapper">
                     <div class="skeleton-shimmer" id="skeletonShimmer"></div>
                     <canvas id="pdfCanvas"></canvas>
                 </div>
             </div>
-            <div class="audio-section">
-                <iframe
-                    id="spotifyPlayer"
-                    style="border-radius:12px"
+            <div class="audio-section" id="audioSection">
+                <iframe id="spotifyPlayer" style="border-radius:12px"
                     src="https://open.spotify.com/embed/playlist/37i9dQZF1DWZeKCadgRdKQ?utm_source=generator"
-                    width="100%"
-                    height="152"
-                    frameBorder="0"
-                    allowfullscreen=""
+                    width="100%" height="152" frameBorder="0" allowfullscreen=""
                     allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                     loading="lazy"></iframe>
             </div>
         </div>
     </div>
     <script src="./social-justice-governance-topics.js"></script>
+    <script src="../assets/viewer-shell.js"></script>
     <script src="../assets/viewer.js"></script>
 </body>
+
 </html>

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Playlists</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            min-height: 100vh;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 2rem 4rem;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(120deg, #84fab0 0%, #8fd3f4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: #a0aec0;
+            font-size: 1.1rem;
+        }
+
+        .back-link {
+            position: absolute;
+            top: 50%;
+            left: 4rem;
+            transform: translateY(-50%);
+            color: #8fd3f4;
+            text-decoration: none;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: color 0.3s ease;
+        }
+
+        .back-link:hover {
+            color: #84fab0;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: clamp(1.25rem, 3vw, 4rem);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+            gap: clamp(1rem, 2vw, 2rem);
+            width: 100%;
+            max-width: 1400px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-decoration: none;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            cursor: pointer;
+        }
+
+        .card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #8fd3f4;
+            line-height: 1.4;
+        }
+
+        .card-footer {
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.85rem;
+            color: #a0aec0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-container {
+            width: 90%;
+            max-width: 1200px;
+            height: 85vh;
+            background: #1a202c;
+            border-radius: 20px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transform: scale(0.95);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .modal-overlay.active .modal-container {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 1.25rem 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .modal-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #84fab0;
+        }
+
+        .modal-external-link {
+            color: #8fd3f4;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .modal-external-link:hover {
+            text-decoration: underline;
+        }
+
+        .modal-close {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .modal-close:hover {
+            background: #e53e3e;
+            transform: rotate(90deg);
+        }
+
+        .modal-body {
+            flex: 1;
+            display: flex;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .video-player-container {
+            flex: 1;
+            position: relative;
+        }
+
+        .video-player-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .video-sidebar {
+            width: 350px;
+            background: #111827;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-item {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: background 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .video-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .video-item.active {
+            background: rgba(132, 250, 176, 0.1);
+            border-left: 3px solid #84fab0;
+        }
+
+        .video-item-number {
+            font-size: 0.9rem;
+            color: #718096;
+            min-width: 24px;
+        }
+
+        .video-item-title {
+            font-size: 0.95rem;
+            color: #e2e8f0;
+            line-height: 1.4;
+            flex: 1;
+        }
+
+        .video-item.active .video-item-title {
+            color: #84fab0;
+            font-weight: 500;
+        }
+
+
+        @media (max-width: 1024px) {
+            .header {
+                padding: 1.75rem 2rem;
+            }
+
+            .back-link {
+                left: 2rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 4rem 1.25rem 1.5rem;
+            }
+
+            .back-link {
+                top: 1.5rem;
+                left: 1.25rem;
+                transform: none;
+            }
+
+            .modal-container {
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
+            }
+
+            .modal-body {
+                flex-direction: column;
+            }
+
+            .video-sidebar {
+                width: 100%;
+                height: 30vh;
+                border-left: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+            }
+
+            .modal-header {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <a href="../index.html" class="back-link">← Back to Dashboard</a>
+        <h1>YouTube Playlists</h1>
+        <p>Curated educational videos and series</p>
+    </header>
+
+    <main class="main-content">
+        <div class="grid" id="playlistsGrid">
+            <!-- Dynamically populated via JS -->
+        </div>
+    </main>
+
+    <div class="modal-overlay" id="videoModalOverlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <h2 class="modal-title" id="modalTitle">Loading...</h2>
+                    <a href="#" target="_blank" rel="noopener noreferrer" class="modal-external-link" id="modalLink">
+                        Watch directly on YouTube ↗
+                    </a>
+                </div>
+                <button class="modal-close" id="modalCloseBtn">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="video-player-container">
+                    <iframe id="youtubePlayer"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-sidebar" id="videoSidebar">
+                    <!-- Dynamic videos here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Import -->
+    <script src="playlists-data.js"></script>
+
+    <!-- Render Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const grid = document.getElementById('playlistsGrid');
+            const overlay = document.getElementById('videoModalOverlay');
+            const closeBtn = document.getElementById('modalCloseBtn');
+            const youtubePlayer = document.getElementById('youtubePlayer');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalLink = document.getElementById('modalLink');
+            const videoSidebar = document.getElementById('videoSidebar');
+
+            // Render cards
+            if (typeof playlists !== 'undefined') {
+                playlists.forEach((playlist, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div class="card-icon">▶️</div>
+                        <div class="card-title">${playlist.name}</div>
+                        <div class="card-footer">
+                            <span>Playlist #${playlist.id}</span>
+                        </div>
+                    `;
+
+                    // Click event to open modal
+                    card.addEventListener('click', () => {
+                        openModal(playlist);
+                    });
+
+                    grid.appendChild(card);
+                });
+            } else {
+                grid.innerHTML = '<p style="text-align:center; color:#ccc;">Error loading playlists data.</p>';
+            }
+
+            function openModal(playlist) {
+                modalTitle.textContent = playlist.name;
+                modalLink.href = playlist.url;
+                videoSidebar.innerHTML = ''; // Clear previous videos
+
+                if (playlist.playlistId && (!playlist.videos || playlist.videos.length === 0)) {
+                    youtubePlayer.src = `https://www.youtube.com/embed/videoseries?list=${playlist.playlistId}&autoplay=1`;
+                    videoSidebar.innerHTML = '<div style="padding: 1.5rem; color:#888; text-align:center; font-size:0.9rem;">Using main playlist loader directly. Individual video selection requires scraper data to complete. Video playlist menu may appear in the player.</div>';
+                } else if (playlist.videos && playlist.videos.length > 0) {
+                    youtubePlayer.src = `https://www.youtube.com/embed/${playlist.videos[0].videoId}?list=${playlist.playlistId}&autoplay=1`;
+
+                    playlist.videos.forEach((vid, idx) => {
+                        const vItem = document.createElement('div');
+                        vItem.className = 'video-item';
+                        if (idx === 0) vItem.classList.add('active');
+
+                        vItem.innerHTML = `
+                            <div class="video-item-number">${idx + 1}</div>
+                            <div class="video-item-title">${vid.title}</div>
+                        `;
+
+                        vItem.addEventListener('click', () => {
+                            document.querySelectorAll('.video-item').forEach(el => el.classList.remove('active'));
+                            vItem.classList.add('active');
+                            youtubePlayer.src = `https://www.youtube.com/embed/${vid.videoId}?list=${playlist.playlistId}&autoplay=1`;
+                        });
+
+                        videoSidebar.appendChild(vItem);
+                    });
+                } else {
+                    youtubePlayer.src = '';
+                }
+
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden'; // prevent background scrolling
+            }
+
+            function closeModal() {
+                overlay.classList.remove('active');
+                youtubePlayer.src = ''; // Stop video playback
+                document.body.style.overflow = '';
+            }
+
+            closeBtn.addEventListener('click', closeModal);
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeModal();
+                }
+            });
+
+            // Close on escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && overlay.classList.contains('active')) {
+                    closeModal();
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

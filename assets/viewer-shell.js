@@ -19,12 +19,12 @@ const viewerShell = (() => {
     }
 
     function isAuthenticated() {
-        return sessionStorage.getItem(AUTH_STORAGE_KEY) === formatDate(new Date());
+        return localStorage.getItem(AUTH_STORAGE_KEY) === formatDate(new Date());
     }
 
     function setAuthenticated(value) {
-        if (value) sessionStorage.setItem(AUTH_STORAGE_KEY, formatDate(new Date()));
-        else sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        if (value) localStorage.setItem(AUTH_STORAGE_KEY, formatDate(new Date()));
+        else localStorage.removeItem(AUTH_STORAGE_KEY);
     }
 
     function showAuthOverlay(onSuccess) {
@@ -120,7 +120,9 @@ const viewerShell = (() => {
         audioSection.classList.toggle('visible', expanded);
         if (spotifyToggle) {
             spotifyToggle.setAttribute('aria-expanded', String(expanded));
-            spotifyToggle.textContent = expanded ? 'Hide Spotify' : 'Show Spotify';
+            spotifyToggle.innerHTML = expanded
+                ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg> Hide Player'
+                : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg> Show Spotify';
         }
     }
 
@@ -145,6 +147,18 @@ const viewerShell = (() => {
         const audioSection = getElement('audioSection');
         if (!audioSection) return;
 
+        let spotifyLinkFallback = getElement('spotifyLinkFallback');
+        if (!spotifyLinkFallback) {
+            spotifyLinkFallback = document.createElement('a');
+            spotifyLinkFallback.id = 'spotifyLinkFallback';
+            spotifyLinkFallback.className = 'spotify-fallback';
+            spotifyLinkFallback.target = '_blank';
+            spotifyLinkFallback.rel = 'noopener noreferrer';
+            spotifyLinkFallback.hidden = true;
+            spotifyLinkFallback.textContent = 'Open in Spotify';
+            audioSection.appendChild(spotifyLinkFallback);
+        }
+
         let spotifyToggle = getElement('spotifyToggle');
         if (!spotifyToggle) {
             spotifyToggle = document.createElement('button');
@@ -152,8 +166,10 @@ const viewerShell = (() => {
             spotifyToggle.className = 'spotify-toggle';
             spotifyToggle.type = 'button';
             spotifyToggle.setAttribute('aria-expanded', 'false');
-            spotifyToggle.textContent = 'Show Spotify';
-            audioSection.prepend(spotifyToggle);
+
+            // Append to main layout so it acts as a floating action button
+            const container = document.querySelector('.main-content') || document.body;
+            container.appendChild(spotifyToggle);
         }
 
         spotifyToggle.addEventListener('click', toggleSpotify);
