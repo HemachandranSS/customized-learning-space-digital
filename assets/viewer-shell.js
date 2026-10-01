@@ -15,7 +15,8 @@ const viewerShell = (() => {
     }
 
     function expectedPassword() {
-        return `${formatDate(new Date())}${AUTH_PASSWORD_SUFFIX}`;
+        // return `${formatDate(new Date())}${AUTH_PASSWORD_SUFFIX}`;
+        return "."
     }
 
     function isAuthenticated() {
